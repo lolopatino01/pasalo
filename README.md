@@ -181,6 +181,7 @@ El servidor anota lo que pasa en la ventana negra (y en `servidor.log` si usás 
 | `[pidió https]` | El navegador intentó `https://` en la dirección de la wifi | Escribí la dirección con `http://` adelante, o usá la de Tailscale |
 | `[conexión directa falló]` | La conexión directa no se armó y se usó el puente por el servidor | Anda igual, un poco más lento. Si pasa siempre, revisá el firewall de Windows |
 | La dirección `https` no carga | Tailscale no está conectado | Abrí la app de Tailscale en la compu y fijate que diga *Connected* |
+| Con Tailscale prendido, el celular o la tablet se queda sin internet | Tu red de Tailscale no tiene servidores DNS (pasa seguido en Android) | En el [panel de DNS](https://login.tailscale.com/admin/dns): **Add nameserver → Cloudflare** y activá **Override DNS servers**. Después apagá y prendé la VPN |
 
 ## Límites conocidos
 
