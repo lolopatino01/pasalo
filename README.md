@@ -1,0 +1,233 @@
+# Pasalo
+
+Pasá archivos directo entre tus dispositivos (compu, celular, tablet) en cualquier dirección, sin subirlos a ningún lado.
+Es una app web instalable (PWA): anda en Windows, Android, iPhone y tablets desde el navegador, y se puede agregar a la
+pantalla de inicio como una app más.
+
+Y si querés tener algo a mano en todos tus dispositivos, cada persona puede conectar **su propio Google Drive**.
+
+## Qué hace
+
+- **Encuentra solos** los dispositivos que están en tu misma wifi. Tocás uno, elegís los archivos y listo.
+- **Cualquier dispositivo con cualquier otro**, sea de quien sea: los de otras redes se vinculan una vez con un código de 6 números.
+- **Archivos de cualquier tamaño**: de una foto a un zip de varios GB. El que recibe tiene que aceptar.
+- **Guarda a disco mientras llega** (en Chrome, Edge, Android y Safari de iOS 26 o más nuevo), así no llena la memoria.
+- **Progreso en vivo**: un anillo alrededor de cada dispositivo, con velocidad, tiempo restante y cancelar.
+- **Recibidos**: quedan en la app hasta que los borres, con Descargar, Abrir y Compartir (en el celular, para guardarlos en Fotos o Archivos).
+- **Tu nube** (opcional): sube a una carpeta "Pasalo" de tu Google Drive y la ves desde todos tus dispositivos.
+- **Compartir → Pasalo** en Android, con la app instalada.
+- Tema claro, oscuro o automático. Mantiene la pantalla encendida mientras transfiere.
+
+## Cómo funciona
+
+```
+   celular ◄──────── archivo, directo y cifrado (WebRTC) ────────► compu
+      │                                                              │
+      └──────────►  servidor de Pasalo (corre en tu compu)  ◄────────┘
+                    solo presenta a los dispositivos entre sí
+```
+
+1. Una compu de la casa corre el **servidor de Pasalo** (Node.js). Sirve la app y presenta a los dispositivos entre sí.
+2. Cada dispositivo abre la app en el navegador y se conecta al servidor.
+3. Al pasar un archivo, los dos dispositivos arman una **conexión directa** (WebRTC, cifrada con DTLS) y el archivo
+   viaja por ahí. El servidor no lo ve.
+4. Si la conexión directa no se puede armar (algunos firewalls o redes la bloquean), el archivo pasa **por el servidor**,
+   o sea, por tu propia compu, sin guardarse en ningún lado.
+5. **Tu nube** es aparte: el navegador sube directo a Google Drive con el permiso de cada persona. El servidor de Pasalo
+   no toca esos archivos.
+
+## Privacidad y seguridad
+
+- **Los archivos no se guardan en ningún servidor.** Van de un dispositivo al otro, y lo recibido queda solo en el dispositivo que lo recibió.
+- **Quién te ve:** solo los dispositivos que llegan a tu servidor (tu wifi o tu red de Tailscale) y los que vinculaste con
+  un código. Nadie puede mandarte nada sin que lo aceptes.
+- **Google Drive:** Pasalo pide el permiso `drive.file`, que solo deja ver y tocar **los archivos que subió Pasalo**,
+  nunca el resto de tu Drive. El permiso queda guardado solo en tu navegador, dura una hora y lo podés sacar en cualquier
+  momento desde Ajustes o desde [tu cuenta de Google](https://myaccount.google.com/permissions).
+- **Este repositorio no tiene datos personales ni claves.** Tu ID de Google va en un archivo `.env` que no se sube
+  (está en `.gitignore`), y las direcciones de tu red no aparecen en el código.
+- **No lo publiques abierto a internet** (por ejemplo, con un túnel público): cualquiera con la dirección vería los
+  nombres de tus dispositivos y podría mandarte pedidos. Para usarlo fuera de casa, usá Tailscale (abajo).
+
+## Instalación
+
+Necesitás una compu que quede prendida mientras usan Pasalo.
+
+### En Windows (lo más fácil)
+
+1. Bajá el proyecto: botón verde **Code → Download ZIP** y descomprimilo, o con git:
+   ```bash
+   git clone https://github.com/lolopatino01/pasalo.git
+   ```
+2. Doble clic en **`iniciar-pasalo.bat`**. La primera vez instala Node.js si falta y prepara todo.
+   Si Windows pregunta por el firewall, permití el acceso en **redes privadas**.
+3. Se abre Pasalo en el navegador. La ventana negra muestra las direcciones para abrirlo desde los otros dispositivos.
+   Dejala abierta mientras lo uses; **`detener-pasalo.bat`** lo apaga.
+
+### En cualquier sistema (Linux, macOS, Windows)
+
+Con [Node.js](https://nodejs.org) 22.12 o más nuevo:
+
+```bash
+npm install
+npm run build
+npm start
+```
+
+Abrí `http://localhost:3000`.
+
+## Usarlo desde el celular y la tablet
+
+### Por la wifi de casa
+
+Con el celular en la misma wifi que la compu, abrí la dirección que muestra la compu al arrancar
+(algo como `http://192.168.1.20:3000`). Ya podés pasar archivos.
+
+Por `http` los navegadores no dejan **instalar** la app ni **guardar a disco** (lo recibido va a memoria, bien para fotos
+y documentos). Para eso hace falta `https`:
+
+### Con https y desde cualquier lado: Tailscale (recomendado)
+
+[Tailscale](https://tailscale.com) arma una red privada entre tus dispositivos, gratis. Te da `https` con certificado
+válido y Pasalo anda también fuera de casa, sin quedar expuesto a internet.
+
+1. Creá una cuenta en Tailscale e instalá la app en la compu y en cada celular o tablet, con la misma cuenta.
+2. En el [panel de Tailscale](https://login.tailscale.com/admin/dns), en **DNS**, activá **MagicDNS** y **HTTPS Certificates**.
+3. En el panel, en **Machines**, abrí el menú de la compu y elegí **Disable key expiry**, así no se desconecta cada pocos meses.
+4. Arrancá Pasalo. En Windows, `iniciar-pasalo.bat` abre Tailscale y publica Pasalo solo; en otros sistemas corré una vez:
+   ```bash
+   tailscale serve --bg 3000
+   ```
+5. Al arrancar, Pasalo muestra la dirección: `https://tu-compu.tu-red.ts.net`. Abrila en el celular e **instalá la app**
+   (Android: menú → Instalar app; iPhone: Compartir → Agregar a inicio).
+
+> En Windows, la app de Tailscale (el ícono al lado del reloj) tiene que estar abierta: si la cerrás, la dirección
+> `https` deja de andar. `iniciar-pasalo.bat` la abre si hace falta.
+
+**Para tu familia:** cada uno instala Tailscale con **su propia cuenta**, y vos les compartís **solo la compu** desde el
+panel (menú de la compu → **Share**). Así llegan a Pasalo y a nada más de tu red.
+
+> Abrir Pasalo por la dirección `http` y por la `https` cuenta como dos apps distintas para el navegador: el
+> dispositivo aparece como nuevo y con otros recibidos. Elegí una y usá siempre esa.
+
+## Vincular dispositivos de otras redes
+
+Los dispositivos de tu wifi aparecen solos. Para uno que está en otra red pero llega a tu servidor (por ejemplo, por
+Tailscale desde otra casa): **Vincular con un código** en los dos. Uno muestra un código de 6 números (dura 5 minutos)
+y el otro lo escribe. Se hace una sola vez.
+
+## Tu nube (Google Drive)
+
+Opcional. Cada persona conecta **su propio** Google Drive y usa **su propio** espacio: el círculo "Tu nube" sube a una
+carpeta "Pasalo" y el panel "Tu nube" lista lo subido en todos sus dispositivos. Las subidas van por partes y se
+retoman si se corta internet. Borrar manda a la papelera de Drive.
+
+Para activarlo hace falta un **ID de cliente** de Google, gratis. Se saca una sola vez (unos 10 minutos):
+
+1. **Proyecto.** Entrá a [Google Cloud](https://console.cloud.google.com/projectcreate) y creá un proyecto llamado `Pasalo`.
+2. **API.** Habilitá la [Google Drive API](https://console.cloud.google.com/apis/library/drive.googleapis.com) en ese proyecto.
+3. **Pantalla de permiso.** En [Google Auth Platform](https://console.cloud.google.com/auth/overview) tocá **Comenzar**:
+   - Nombre de la app `Pasalo`, tu mail de asistencia y de contacto, público **Externo**.
+   - En **Público → Usuarios de prueba**, agregá el mail de cada persona que lo va a usar. Solo esas cuentas pueden conectar.
+   - En **Acceso a los datos → Agregar o quitar permisos**, tildá `.../auth/drive.file` y guardá.
+   - Dejá la app en modo **Prueba**: no hace falta mandarla a verificar.
+4. **Cliente.** En **Clientes → Crear cliente**, tipo **Aplicación web**. En **Orígenes autorizados de JavaScript** poné
+   cada dirección por la que se abre Pasalo, por ejemplo:
+   - `https://tu-compu.tu-red.ts.net`
+   - `http://localhost:3000`
+
+   Dejá vacías las URIs de redireccionamiento. El secreto del cliente no hace falta.
+5. **Configurarlo.** Creá un archivo `.env` en la carpeta del proyecto con el ID de cliente y reiniciá Pasalo:
+   ```
+   GOOGLE_CLIENT_ID=123456789-abc.apps.googleusercontent.com
+   ```
+
+Al conectar, Google avisa "Google no verificó esta app": es normal en modo prueba, tocá **Continuar**. Si dice
+`origin_mismatch`, la dirección no está en los orígenes autorizados (o Google todavía no la tomó: esperá unos minutos).
+
+Sin `GOOGLE_CLIENT_ID`, "Tu nube" no aparece. Necesita `https` o `localhost`: por `http://192.168...` Google no deja conectar.
+
+## Configuración
+
+Variables de entorno, o un archivo `.env` en la carpeta del proyecto (una por línea, `NOMBRE=valor`):
+
+| Variable | Default | Para qué |
+|---|---|---|
+| `PORT` | `3000` | Puerto |
+| `HOST` | `0.0.0.0` | Interfaz donde escucha |
+| `GOOGLE_CLIENT_ID` | vacío | Activa "Tu nube" (ver arriba) |
+| `TRUST_PROXY` | apagado | `1` para confiar en `X-Forwarded-For` de un proxy en otra máquina |
+| `STUN_URLS` | Google y Cloudflare | Servidores STUN, separados por coma |
+| `TURN_URL`, `TURN_USERNAME`, `TURN_CREDENTIAL` | vacío | Servidor TURN opcional, para redes que bloquean la conexión directa |
+| `SSL_CERT`, `SSL_KEY` | vacío | Rutas a un certificado para servir `https` directo |
+
+### En un servidor (Raspberry Pi, VPS)
+
+```bash
+docker build -t pasalo .
+docker run -d --restart unless-stopped -p 3000:3000 -e GOOGLE_CLIENT_ID=... pasalo
+```
+
+Si queda detrás de un proxy en otra máquina, agregá `-e TRUST_PROXY=1` para que el servidor vea la IP real de cada
+dispositivo y agrupe bien "tu red".
+
+## Si algo no anda
+
+El servidor anota lo que pasa en la ventana negra (y en `servidor.log` si usás `iniciar-pasalo.bat`):
+
+| Ves | Qué significa | Qué hacer |
+|---|---|---|
+| No aparece nada al abrir la página | El pedido no llega a la compu | Fijate que estén en la misma wifi (no la de invitados) o que Tailscale esté conectado. En iPhone con Chrome o Brave, activá **Red local** en Ajustes → la app |
+| `[pidió https]` | El navegador intentó `https://` en la dirección de la wifi | Escribí la dirección con `http://` adelante, o usá la de Tailscale |
+| `[conexión directa falló]` | La conexión directa no se armó y se usó el puente por el servidor | Anda igual, un poco más lento. Si pasa siempre, revisá el firewall de Windows |
+| La dirección `https` no carga | Tailscale no está conectado | Abrí la app de Tailscale en la compu y fijate que diga *Connected* |
+
+## Límites conocidos
+
+- Los dos dispositivos tienen que tener Pasalo abierto al mismo tiempo.
+- En iPhone con iOS anterior al 26, lo recibido va a memoria: bien para fotos y documentos, no para archivos de varios GB.
+- Si el celular bloquea la pantalla o cambia de app, el sistema puede cortar la transferencia.
+- Carpetas: por ahora hay que comprimirlas en un zip.
+
+## Desarrollo
+
+| Parte | Tecnología |
+|---|---|
+| App | TypeScript + Vite, sin framework (≈20 KB comprimida) |
+| Servidor | Node.js + `ws` |
+| Transferencia | WebRTC DataChannel, con puente por WebSocket de respaldo |
+| Guardado | OPFS (Origin Private File System), escribe a disco mientras llega |
+| Nube | Google Identity Services + Drive API v3 (subida reanudable) |
+
+El emisor no se adelanta más de 16 MB a lo que el receptor confirmó como escrito, así un celular lento no se queda sin memoria.
+
+```bash
+npm run dev        # servidor con recarga automática
+npm run check      # tipos (tsc --noEmit)
+npm run build      # compila a dist/
+```
+
+**Pruebas.** `tests/e2e.mjs` abre dos navegadores con Playwright y prueba un archivo de 300 MB (verificado con SHA-256),
+rechazar, cancelar, recargar, vincular con código, quitar dispositivos, el tema y "Tu nube" (con Google Drive simulado):
+
+```bash
+npm i --no-save playwright && npx playwright install chromium
+PORT=3100 npm start        # en otra terminal
+npm run test:e2e           # RELAY=1 npm run test:e2e fuerza el puente por el servidor
+```
+
+**Estructura.**
+
+```
+server/index.js     servidor: señalización (WebSocket), sirve la app, /config.json, puente de respaldo
+src/main.ts         interfaz
+src/transfer.ts     protocolo de transferencia y control de flujo
+src/peer.ts         conexión WebRTC
+src/relay.ts        conexión por el servidor cuando la directa no se arma
+src/signaling.ts    cliente del WebSocket con reconexión
+src/store.ts        guardado de lo recibido (disco o memoria)
+src/drive.ts        Tu nube: Google Drive (permiso, subida reanudable, lista, papelera)
+src/identity.ts     nombre e identidad del dispositivo, vinculados
+src/share.ts        archivos que llegan desde "Compartir" (Android)
+public/sw.js        service worker (offline y Compartir)
+```

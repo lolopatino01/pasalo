@@ -1,0 +1,9 @@
+node_modules
+dist
+*.log
+tools
+url.txt
+*.zip
+# Datos de cada instalación: el ID de Google y notas de la propia red
+.env
+CLAUDE.local.md

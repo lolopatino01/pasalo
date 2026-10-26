@@ -1,0 +1,9 @@
+node_modules
+dist
+.git
+tests
+.env
+CLAUDE.local.md
+*.log
+*.zip
+tools

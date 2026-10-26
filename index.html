@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Pasalo</title>
+    <meta name="description" content="Pasá archivos directo entre tus dispositivos." />
+    <meta name="theme-color" content="#EDF0EA" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0F1513" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light dark" />
+    <script>
+      try {
+        var t = localStorage.getItem('pasalo.theme');
+        if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+      } catch (e) {}
+    </script>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/favicon.png" type="image/png" />
+    <link rel="icon" href="/icons/logo.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Pasalo" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  </head>
+  <body>
+    <header class="top">
+      <a class="brand" href="/" aria-label="Pasalo, inicio">
+        <img src="/icons/logo.svg" alt="" width="28" height="28" />
+        <span>pasalo</span>
+      </a>
+      <span id="status" class="status" role="status"></span>
+      <button id="theme-btn" class="icon-btn" type="button"></button>
+      <button id="settings-btn" class="icon-btn" type="button" aria-label="Ajustes"></button>
+    </header>
+
+    <div id="banner" class="banner" hidden></div>
+    <div id="replaced" class="banner" hidden>
+      Pasalo está abierto en otra pestaña o ventana de este navegador.
+      <button id="replaced-btn" class="link-btn" type="button">Usar esta</button>
+    </div>
+
+    <main class="layout">
+      <section class="devices" aria-labelledby="devices-title">
+        <p class="me">Te ven como <button id="me-name" class="me-name" type="button"></button></p>
+        <h1 id="devices-title">¿A dónde lo pasás?</h1>
+        <p id="devices-hint" class="hint"></p>
+        <ul id="devices" class="device-grid"></ul>
+        <div id="devices-empty" class="empty" hidden>
+          <p>Todavía no hay otros dispositivos.</p>
+          <p class="muted">Abrí Pasalo en otro dispositivo conectado a tu misma wifi y va a aparecer acá. Si está en otra red, vinculalo con un código.</p>
+        </div>
+        <button id="pair-btn" class="btn btn-quiet" type="button">Vincular con un código</button>
+      </section>
+
+      <aside class="side">
+        <section id="activity" class="panel" aria-labelledby="activity-title" hidden>
+          <div class="panel-head">
+            <h2 id="activity-title">Transferencias</h2>
+            <button id="clear-btn" class="link-btn" type="button" hidden>Limpiar terminadas</button>
+          </div>
+          <ul id="transfers" class="rows"></ul>
+        </section>
+
+        <section class="panel" aria-labelledby="inbox-title">
+          <div class="panel-head">
+            <h2 id="inbox-title">Recibidos</h2>
+            <span id="storage-line" class="muted small"></span>
+          </div>
+          <ul id="received" class="rows"></ul>
+          <p id="received-empty" class="muted empty-line">Lo que te pasen desde otros dispositivos aparece acá.</p>
+        </section>
+
+        <section id="cloud-panel" class="panel" aria-labelledby="cloud-title" hidden>
+          <div class="panel-head">
+            <h2 id="cloud-title">Tu nube</h2>
+            <span id="cloud-line" class="muted small"></span>
+          </div>
+          <ul id="cloud-files" class="rows"></ul>
+          <p id="cloud-empty" class="muted empty-line"></p>
+          <button id="cloud-connect" class="btn" type="button" hidden></button>
+        </section>
+      </aside>
+    </main>
+
+    <dialog id="request-dlg" class="sheet" aria-labelledby="request-title">
+      <form method="dialog">
+        <h2 id="request-title"></h2>
+        <ul id="request-files" class="file-list"></ul>
+        <p id="request-total" class="muted"></p>
+        <p id="request-warn" class="warn" hidden></p>
+        <div class="actions">
+          <button value="decline" class="btn" type="submit">Rechazar</button>
+          <button value="accept" class="btn btn-primary" type="submit">Aceptar</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="pair-dlg" class="sheet" aria-labelledby="pair-title">
+      <div class="sheet-head">
+        <h2 id="pair-title">Vincular un dispositivo</h2>
+        <button class="icon-btn close" type="button" data-close aria-label="Cerrar">×</button>
+      </div>
+      <p class="muted">Sirve para dispositivos que no están en tu wifi, por ejemplo el celular de alguien de tu familia. Se hace una sola vez.</p>
+      <div class="pair-grid">
+        <div class="pair-col">
+          <h3>En este dispositivo</h3>
+          <button id="pair-show" class="btn" type="button">Mostrar un código</button>
+          <div id="pair-code-box" hidden>
+            <output id="pair-code" class="pair-code"></output>
+            <p id="pair-expiry" class="muted small"></p>
+          </div>
+        </div>
+        <form id="pair-form" class="pair-col">
+          <h3><label for="pair-input">En el otro dispositivo</label></h3>
+          <input id="pair-input" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="6 números" required />
+          <button class="btn btn-primary" type="submit">Vincular</button>
+          <p id="pair-error" class="warn" hidden></p>
+        </form>
+      </div>
+    </dialog>
+
+    <dialog id="settings-dlg" class="sheet" aria-labelledby="settings-title">
+      <div class="sheet-head">
+        <h2 id="settings-title">Ajustes</h2>
+        <button class="icon-btn close" type="button" data-close aria-label="Cerrar">×</button>
+      </div>
+      <form id="name-form" class="field">
+        <label for="name-input">Nombre de este dispositivo</label>
+        <div class="inline">
+          <input id="name-input" maxlength="40" required />
+          <button class="btn" type="submit">Guardar</button>
+        </div>
+      </form>
+      <div class="field">
+        <h3>Dispositivos vinculados</h3>
+        <ul id="pairs-list" class="rows compact"></ul>
+        <p id="pairs-empty" class="muted small">Ninguno. Los dispositivos de tu wifi aparecen solos.</p>
+      </div>
+      <div class="field">
+        <h3>Tema</h3>
+        <div class="segmented" role="radiogroup" aria-label="Tema">
+          <button type="button" role="radio" data-theme-choice="system">Automático</button>
+          <button type="button" role="radio" data-theme-choice="light">Claro</button>
+          <button type="button" role="radio" data-theme-choice="dark">Oscuro</button>
+        </div>
+      </div>
+      <div class="field" id="hidden-field" hidden>
+        <h3>Dispositivos quitados</h3>
+        <ul id="hidden-list" class="rows compact"></ul>
+      </div>
+      <div class="field" id="install-field">
+        <h3>Instalar</h3>
+        <button id="install-btn" class="btn" type="button" hidden>Instalar Pasalo</button>
+        <p id="install-help" class="muted small"></p>
+      </div>
+      <div class="field" id="cloud-field" hidden>
+        <h3>Tu nube</h3>
+        <p id="cloud-account" class="muted small"></p>
+        <button id="cloud-disconnect" class="btn" type="button">Desconectar Google Drive</button>
+      </div>
+      <div class="field">
+        <h3>Archivos grandes</h3>
+        <p id="storage-mode" class="muted small"></p>
+      </div>
+    </dialog>
+
+    <dialog id="device-dlg" class="sheet" aria-labelledby="device-title">
+      <div class="sheet-head">
+        <h2 id="device-title"></h2>
+        <button class="icon-btn close" type="button" data-close aria-label="Cerrar">×</button>
+      </div>
+      <p id="device-info" class="muted"></p>
+      <div class="actions">
+        <button id="device-remove" class="btn btn-danger" type="button">Quitar de la lista</button>
+      </div>
+    </dialog>
+
+    <div id="toasts" class="toasts" aria-live="polite"></div>
+    <input id="picker" type="file" multiple hidden />
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
