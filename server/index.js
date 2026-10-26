@@ -106,7 +106,7 @@ function handleApi(req, res) {
   if (pathname === '/config.json') {
     res.writeHead(200, { ...SECURITY_HEADERS, 'Content-Type': MIME['.json'], 'Cache-Control': 'no-store' });
     // El Client ID de Google no es secreto: identifica a la app ante Google (ver README, "Nube").
-    res.end(JSON.stringify({ iceServers: iceServers(), googleClientId: process.env.GOOGLE_CLIENT_ID || '' }));
+    res.end(JSON.stringify({ iceServers: iceServers(), googleClientId: process.env.GOOGLE_CLIENT_ID || '', build: currentBuild() }));
     return true;
   }
   if (pathname === '/health') {
@@ -462,6 +462,16 @@ async function main() {
       else if (ts) console.log(`Tailscale está listo pero no publica Pasalo. Corré una vez:\n   tailscale serve --bg ${PORT}\n`);
     });
   });
+}
+
+// El script de la app compilada (cambia de nombre en cada versión). Se lee cada vez porque
+// iniciar-pasalo.bat recompila sin reiniciar a los que ya tienen la app abierta.
+function currentBuild() {
+  try {
+    return /\/assets\/index-[\w-]+\.js/.exec(fs.readFileSync(path.join(DIST, 'index.html'), 'utf8'))?.[0] ?? '';
+  } catch {
+    return '';
+  }
 }
 
 // Dirección https que da `tailscale serve` (ver README). null si Tailscale no está o no inició sesión.

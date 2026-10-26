@@ -1036,5 +1036,19 @@ if ('serviceWorker' in navigator && isSecureContext && import.meta.env.PROD) {
   navigator.serviceWorker.register('/sw.js').catch(() => {});
 }
 
+// La app instalada (sobre todo en iPhone) no se recarga sola: si el servidor tiene una versión nueva,
+// recargar al volver a la app, siempre que no se esté pasando ni eligiendo nada.
+async function updateIfNew() {
+  const mine = document.querySelector('script[src*="/assets/index-"]')?.getAttribute('src');
+  if (!mine || document.visibilityState !== 'visible') return;
+  try {
+    const { build } = await (await fetch('/config.json')).json();
+    const busy = allTransfers().some((t) => !isFinal(t.status)) || pendingShare.length > 0 || !!document.querySelector('dialog[open]');
+    if (build && build !== mine && !busy) location.reload();
+  } catch { /* sin servidor: se prueba la próxima vez */ }
+}
+document.addEventListener('visibilitychange', updateIfNew);
+setInterval(updateIfNew, 10 * 60_000);
+
 // Para pruebas automáticas
 (window as any).__pasalo = { manager, drive, me, get peers() { return peers; }, get received() { return received; } };

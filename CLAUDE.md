@@ -42,6 +42,9 @@ tests/e2e.mjs      Playwright: dos navegadores, 300 MB con SHA-256, rechazar, ca
 - Si la compu abre la app por su propia IP de red, el servidor redirige a `http://localhost:3000` (evita identidades duplicadas).
 - Protocolo por DataChannel: offer → accept/decline → file / trozos binarios / file-end → done → received; ack con bytes escritos.
   Texto: {t:text} → received, sin aceptar (máx. 10.000 caracteres); el receptor lo guarda como un recibido con `text`.
+- Versiones: /config.json trae `build` (el script de dist/index.html, leído en cada pedido). La app lo compara al volver
+  a primer plano y cada 10 min, y se recarga sola si cambió y no hay transferencias, diálogos ni nada pendiente
+  (la app instalada en iPhone no se recarga nunca por su cuenta).
 - Tocar un dispositivo abre "¿qué le pasás?": Archivos / Una carpeta (no en iOS) / Texto o link (no para la nube).
 
 ## Cómo correrlo
