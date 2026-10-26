@@ -28,7 +28,10 @@ src/signaling.ts   cliente WS con reconexión; frames binarios [16 bytes id][dat
 src/store.ts       recibidos: OPFS (disco, streaming) si hay contexto seguro; si no, memoria
 src/identity.ts    id del dispositivo, nombre, vinculados (pairs), quitados (hidden) en localStorage
 src/share.ts       archivos que llegan por "Compartir → Pasalo" (Android, share_target)
-src/drive.ts       "Tu nube": Google Drive de cada persona (GIS token, drive.file, subida reanudable, lista, papelera)
+src/drive.ts       "Tu nube": Google Drive de cada persona (GIS token, drive.file, subida reanudable, lista, papelera,
+                   download() a Recibidos, source() para pasar un archivo de la nube a otro dispositivo por Range)
+src/zip.ts         Source (lo que se manda: File, zip al vuelo o archivo de Drive); zipSource arma un zip STORE con
+                   data descriptors y CRC calculado al leer (tamaño conocido de antemano, ZIP64 si hace falta)
 public/sw.js       service worker (offline + share target)
 tests/e2e.mjs      Playwright: dos navegadores, 300 MB con SHA-256, rechazar, cancelar, vincular, quitar, tema
 ```
@@ -38,6 +41,8 @@ tests/e2e.mjs      Playwright: dos navegadores, 300 MB con SHA-256, rechazar, ca
 - El servidor confía en `X-Forwarded-For` solo si viene de loopback o con `TRUST_PROXY=1`.
 - Si la compu abre la app por su propia IP de red, el servidor redirige a `http://localhost:3000` (evita identidades duplicadas).
 - Protocolo por DataChannel: offer → accept/decline → file / trozos binarios / file-end → done → received; ack con bytes escritos.
+  Texto: {t:text} → received, sin aceptar (máx. 10.000 caracteres); el receptor lo guarda como un recibido con `text`.
+- Tocar un dispositivo abre "¿qué le pasás?": Archivos / Una carpeta (no en iOS) / Texto o link (no para la nube).
 
 ## Cómo correrlo
 
@@ -46,7 +51,7 @@ tests/e2e.mjs      Playwright: dos navegadores, 300 MB con SHA-256, rechazar, ca
   corre `tailscale serve --bg 3000`, arranca y abre el navegador en localhost. Registro en `servidor.log` (UTF-16 por
   Tee-Object). `detener-pasalo.bat` lo apaga.
 - Manual: `npm install && npm run build && npm start` → http://localhost:3000. Desarrollo: `npm run dev`.
-- Pruebas: `PORT=3100 npm start` y `npm run test:e2e` (necesita Playwright). `RELAY=1` fuerza el puente por el servidor.
+- Pruebas: `GOOGLE_CLIENT_ID= PORT=3100 npm start` (sin el ID real del `.env`) y `npm run test:e2e` (necesita Playwright). `RELAY=1` fuerza el puente por el servidor.
 
 ## Estado (26/10/2026)
 
@@ -69,7 +74,9 @@ cloudflared no sirve para instalar: su dirección cambia en cada arranque y con 
 Pendiente / a revisar:
 1. Probar instalar desde iPhone y tablet por la dirección https y recibir un archivo grande a disco.
 2. iPhone: Safari solo tiene `createWritable` (OPFS a disco) desde iOS 26; en versiones anteriores sigue yendo a memoria.
-3. Carpetas: hoy hay que comprimirlas en zip.
+3. Carpetas, texto y bajar/pasar desde la nube (26/10): probados en el e2e (directo y RELAY=1) y el zip con tar y
+   Expand-Archive de Windows; ZIP64 verificado con un archivo simulado de 4,4 GB. Sin probar en dispositivos reales.
+   El permiso de Drive dura una hora: bajar o pasar desde la nube se corta si vence a mitad (las subidas no).
 4. **Tu nube (Google Drive)**, hecho el 26/10. Probado con la cuenta real del dueño desde la compu (localhost):
    conecta y sube a la carpeta Pasalo. Falta probarlo en iPhone. Decisión del dueño: cada persona
    conecta su propio Drive y usa su espacio (no se comparten nubes entre personas; para eso está el pase directo).

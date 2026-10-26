@@ -33,6 +33,29 @@ const ok = (cond, msg) => {
   console.log('✓', msg);
 };
 
+/** Toca un dispositivo, elige "Archivos" (o "Una carpeta") y carga lo pedido en el selector. */
+async function sendFiles(page, device, files, choice = '#send-files') {
+  await page.click(device);
+  const chooser = page.waitForEvent('filechooser');
+  await page.click(choice);
+  await (await chooser).setFiles(files);
+}
+const deviceOf = async (page) => `#devices .device[data-id="${await page.evaluate(() => window.__pasalo.me.id)}"] .device-btn`;
+
+/** Lee un zip (sin ZIP64) con su directorio central y devuelve nombre → contenido. */
+function unzip(buf) {
+  const out = new Map();
+  const end = buf.length - 22;
+  let p = buf.readUInt32LE(end + 16);
+  for (let i = 0; i < buf.readUInt16LE(end + 10); i++) {
+    const size = buf.readUInt32LE(p + 24), nl = buf.readUInt16LE(p + 28), el = buf.readUInt16LE(p + 30), off = buf.readUInt32LE(p + 42);
+    const start = off + 30 + buf.readUInt16LE(off + 26) + buf.readUInt16LE(off + 28);
+    out.set(buf.subarray(p + 46, p + 46 + nl).toString(), buf.subarray(start, start + size));
+    p += 46 + nl + el;
+  }
+  return out;
+}
+
 // RELAY=1 bloquea la conexión directa para probar el puente por el servidor.
 const RELAY = process.env.RELAY === '1';
 const browser = await chromium.launch({
@@ -61,9 +84,9 @@ await A.screenshot({ path: `${SHOTS}/1-pc.png` });
 await B.screenshot({ path: `${SHOTS}/1-celu.png` });
 
 // ---- 1. Archivo grande PC -> celular
-const chooser = A.waitForEvent('filechooser');
-await A.click('#devices .device-btn');
-await (await chooser).setFiles([big, photo]);
+const toB = await deviceOf(B);
+const toA = await deviceOf(A);
+await sendFiles(A, toB, [big, photo]);
 await B.waitForSelector('#request-dlg[open]');
 await B.waitForTimeout(400);
 await B.screenshot({ path: `${SHOTS}/2-celu-pedido.png` });
@@ -104,9 +127,7 @@ ok(fs.readFileSync(file).equals(fs.readFileSync(photo)), 'el botón Descargar ba
 
 // ---- 4. Rechazar (celular -> PC)
 await B.waitForSelector('#devices .device:not(.offline)');
-const ch2 = B.waitForEvent('filechooser');
-await B.click('#devices .device-btn');
-await (await ch2).setFiles([photo]);
+await sendFiles(B, toA, [photo]);
 await A.waitForSelector('#request-dlg[open]');
 await A.screenshot({ path: `${SHOTS}/5-pc-pedido.png` });
 await A.click('#request-dlg button[value=decline]');
@@ -114,9 +135,7 @@ await B.waitForSelector('#transfers .s-declined');
 ok(true, 'rechazar avisa al que envía');
 
 // ---- 5. Cancelar a mitad de camino
-const ch3 = A.waitForEvent('filechooser');
-await A.click('#devices .device-btn');
-await (await ch3).setFiles([big]);
+await sendFiles(A, toB, [big]);
 await B.waitForSelector('#request-dlg[open]');
 await B.click('#request-dlg button[value=accept]');
 await B.waitForFunction(() => [...window.__pasalo.manager.transfers.values()].some((t) => t.status === 'active' && t.bytes > 5e6));
@@ -186,8 +205,49 @@ await A.screenshot({ path: `${SHOTS}/9-pc-tema.png` });
 await B.click('#settings-btn');
 await B.waitForTimeout(400);
 await B.screenshot({ path: `${SHOTS}/8-celu-ajustes.png` });
+await B.keyboard.press('Escape');
 
-// ---- 10. Tu nube (Google Drive simulado: el script de Google y la API se responden acá)
+// ---- 10. Texto y links
+await A.click(toB);
+await A.waitForSelector('#send-dlg[open]');
+await A.screenshot({ path: `${SHOTS}/9-pc-que-pasar.png` });
+await A.click('#send-text');
+await A.fill('#text-input', 'Mirá esta receta: https://example.com/receta?id=1');
+await A.click('#text-form button[type=submit]');
+await B.waitForSelector('#text-dlg[open]');
+ok((await B.textContent('#text-body')).includes('https://example.com/receta?id=1'), 'el texto llega y se muestra sin pedir permiso');
+ok((await B.isVisible('#text-open')) && (await B.getAttribute('#text-open', 'href')) === 'https://example.com/receta?id=1', 'ofrece abrir el link');
+await A.waitForSelector('.toast:has-text("Le pasaste el texto")');
+await B.screenshot({ path: `${SHOTS}/9-celu-texto.png` });
+await B.click('#text-dlg [data-close]');
+await B.reload();
+await B.waitForFunction(() => window.__pasalo.received.some((r) => r.text?.includes('receta')));
+ok((await B.textContent('#received')).includes('Mirá esta receta'), 'el texto queda en Recibidos, también después de recargar');
+
+// ---- 11. Carpetas (llegan como un zip armado al vuelo)
+const folder = path.join(tmp, 'Viaje');
+fs.mkdirSync(path.join(folder, 'fotos'), { recursive: true });
+fs.copyFileSync(photo, path.join(folder, 'fotos', 'playa.png'));
+fs.writeFileSync(path.join(folder, 'notas ñ.txt'), 'llevar protector\n');
+fs.writeFileSync(path.join(folder, 'vacío.txt'), '');
+const nBefore = await B.evaluate(() => window.__pasalo.received.length);
+await sendFiles(A, toB, folder, '#send-folder');
+await B.waitForSelector('#request-dlg[open]');
+ok((await B.textContent('#request-files')).includes('Viaje.zip'), 'la carpeta se ofrece como Viaje.zip');
+await B.click('#request-dlg button[value=accept]');
+await B.waitForFunction((n) => window.__pasalo.received.length === n + 1, nBefore);
+const zipB64 = await B.evaluate(async () => {
+  const r = window.__pasalo.received.find((x) => x.name === 'Viaje.zip');
+  const bytes = new Uint8Array(await r.file.arrayBuffer());
+  let s = '';
+  for (let i = 0; i < bytes.length; i += 32768) s += String.fromCharCode(...bytes.subarray(i, i + 32768));
+  return btoa(s);
+});
+const entries = unzip(Buffer.from(zipB64, 'base64'));
+ok(entries.size === 3 && entries.get('fotos/playa.png')?.equals(fs.readFileSync(photo)), 'el zip trae las subcarpetas y los archivos idénticos');
+ok(entries.get('notas ñ.txt')?.toString() === 'llevar protector\n' && entries.get('vacío.txt')?.length === 0, 'con tildes y archivos vacíos');
+
+// ---- 12. Tu nube (Google Drive simulado: el script de Google y la API se responden acá)
 const mid = path.join(tmp, 'presentación.pdf');
 fs.writeFileSync(mid, crypto.randomBytes(20 << 20)); // 3 trozos de 8 MB
 const midHash = crypto.createHash('sha256').update(fs.readFileSync(mid)).digest('hex');
@@ -225,6 +285,16 @@ await cloud.route('https://www.googleapis.com/**', async (route) => {
     return json(route, { files: fake.files.filter((f) => !f.trashed).map(({ data, trashed, ...f }) => ({ ...f, size: String(f.size) })) });
   }
   if (url.pathname === '/drive/v3/files' && req.method() === 'POST') return json(route, { id: (fake.folder = 'carpeta') });
+  if (url.pathname.startsWith('/drive/v3/files/') && req.method() === 'GET' && url.searchParams.get('alt') === 'media') {
+    const f = fake.files.find((x) => x.id === url.pathname.split('/').pop());
+    const [, a, b] = /bytes=(\d+)-(\d+)/.exec(req.headers()['range']);
+    fake.ranges = (fake.ranges ?? 0) + 1;
+    return route.fulfill({
+      status: 206,
+      headers: { ...cors, 'Content-Type': 'application/octet-stream', 'Content-Range': `bytes ${a}-${b}/${f.size}` },
+      body: f.data.subarray(Number(a), Number(b) + 1),
+    });
+  }
   if (url.pathname.startsWith('/drive/v3/files/') && req.method() === 'PATCH') {
     fake.files.find((f) => f.id === url.pathname.split('/').pop()).trashed = true;
     return json(route, { id: 'ok' });
@@ -259,9 +329,7 @@ ok(await D.isVisible('#cloud-connect'), 'aparece "Tu nube" con el botón para co
 await D.click('#devices .device.cloud .device-btn');
 await D.waitForFunction(() => document.querySelector('#cloud-empty').textContent.includes('Todavía no subiste nada'));
 ok(fake.folder === 'carpeta' && (await D.isHidden('#cloud-connect')), 'conectar Drive crea la carpeta y muestra la nube vacía');
-const ch4 = D.waitForEvent('filechooser');
-await D.click('#devices .device.cloud .device-btn');
-await (await ch4).setFiles([mid]);
+await sendFiles(D, '#devices .device.cloud .device-btn', [mid]);
 await D.waitForSelector('#transfers .s-done', { timeout: 60000 });
 const up = fake.files[0];
 ok(up && crypto.createHash('sha256').update(up.data).digest('hex') === midHash, 'sube a Drive por trozos, retoma tras un corte y llega idéntico (SHA-256)');
@@ -271,6 +339,30 @@ await D.screenshot({ path: `${SHOTS}/10-nube.png` });
 await D.reload();
 await D.waitForSelector('#cloud-files .row');
 ok((await D.textContent('#cloud-files')).includes('presentación.pdf'), 'después de recargar, la nube sigue conectada y lista lo subido');
+
+await D.click('#cloud-files .row button:has-text("Bajar")');
+await D.waitForFunction(() => window.__pasalo.received.some((r) => r.name === 'presentación.pdf'), null, { timeout: 60000 });
+const down = await D.evaluate(async () => {
+  const r = window.__pasalo.received.find((x) => x.name === 'presentación.pdf');
+  const h = await crypto.subtle.digest('SHA-256', await r.file.arrayBuffer());
+  return { persisted: r.persisted, hash: [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, '0')).join('') };
+});
+ok(down.hash === midHash && down.persisted, 'Bajar trae el archivo de la nube a Recibidos, idéntico y a disco');
+
+const rangesBefore = fake.ranges;
+await D.click('#cloud-files .row button:has-text("Pasar a")');
+await D.waitForSelector('#devices-hint.hint-strong');
+const aBefore = await A.evaluate(() => window.__pasalo.received.length);
+await D.click(toA);
+await A.waitForSelector('#request-dlg[open]');
+await A.click('#request-dlg button[value=accept]');
+await A.waitForFunction((n) => window.__pasalo.received.length === n + 1, aBefore, { timeout: 60000 });
+const passed = await A.evaluate(async () => {
+  const r = window.__pasalo.received.find((x) => x.name === 'presentación.pdf');
+  const h = await crypto.subtle.digest('SHA-256', await r.file.arrayBuffer());
+  return [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, '0')).join('');
+});
+ok(passed === midHash && fake.ranges > rangesBefore, '"Pasar a…" manda un archivo de la nube a otro dispositivo, bajándolo de a pedazos');
 await D.click('#cloud-files .link-btn.danger');
 await D.waitForFunction(() => !document.querySelector('#cloud-files .row'));
 ok(fake.files[0].trashed, 'borrar lo manda a la papelera de Drive');

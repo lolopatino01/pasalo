@@ -2,13 +2,14 @@ import '@fontsource-variable/schibsted-grotesk';
 import './style.css';
 import { loadIdentity, saveIdentity, type Pairing } from './identity';
 import { Signaling, type RemotePeer, type ServerMsg } from './signaling';
-import { TransferManager, isFinal, type Transfer } from './transfer';
+import { MAX_TEXT, TransferManager, isFinal, type Transfer } from './transfer';
 import {
-  deleteSaved, loadSaved, requestPersistence, storageInfo, supportsDiskStreaming, type Received,
+  deleteSaved, loadSaved, requestPersistence, saveText, storageInfo, supportsDiskStreaming, type Received,
 } from './store';
 import { takeSharedFiles } from './share';
 import { CLOUD_ID, Drive, type CloudFile } from './drive';
-import { ICONS, canPreview, el, fileIcon, formatBytes, formatDuration, svg, type DeviceKind } from './util';
+import { readDropped, zipsFromPicked, type Source } from './zip';
+import { ICONS, canPreview, el, fileIcon, formatBytes, formatDuration, randomHex, svg, type DeviceKind } from './util';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -18,7 +19,9 @@ const me = loadIdentity();
 let peers: RemotePeer[] = [];
 let received: Received[] = [];
 let iceServers: RTCIceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }];
-let pendingShare: File[] = [];
+/** Lo que llegó por "Compartir" o se eligió de la nube, esperando que toques a quién pasárselo. */
+let pendingShare: Source[] = [];
+let pendingFromCloud = false;
 const requestQueue: Transfer[] = [];
 let pickTarget: string | null = null;
 
@@ -120,12 +123,25 @@ manager.addEventListener('remote-cancel', (e) => {
   updateTitle();
 });
 
-manager.addEventListener('received', (e) => {
+function onReceived(e: Event) {
   received.unshift((e as CustomEvent<Received>).detail);
   renderReceived();
+}
+manager.addEventListener('received', onReceived);
+drive.addEventListener('received', (e) => {
+  onReceived(e);
+  toast(`Listo, "${(e as CustomEvent<Received>).detail.name}" está en Recibidos.`);
 });
 
-function sendTo(peerId: string, files: File[]) {
+manager.addEventListener('text', async (e) => {
+  const { peerName, text } = (e as CustomEvent<{ peerName: string; text: string }>).detail;
+  const r = await saveText(randomHex(8), text, peerName);
+  received.unshift(r);
+  renderReceived();
+  showText(r, `${peerName} te pasó un texto`);
+});
+
+function sendTo(peerId: string, files: Source[]) {
   if (!files.length) return;
   if (peerId === CLOUD_ID) {
     if (drive.ready) drive.upload(files);
@@ -251,14 +267,25 @@ function updateHint() {
   const hint = $('devices-hint');
   const anyOnline = peers.length > 0;
   if (pendingShare.length) {
-    hint.textContent = `Tenés ${pendingShare.length === 1 ? 'un archivo' : `${pendingShare.length} archivos`} para pasar. Tocá a qué dispositivo.`;
+    hint.replaceChildren(
+      pendingFromCloud
+        ? `Tocá a qué dispositivo pasarle "${pendingShare[0].name}" desde tu nube. `
+        : `Tenés ${pendingShare.length === 1 ? 'un archivo' : `${pendingShare.length} archivos`} para pasar. Tocá a qué dispositivo. `,
+      el('button', { class: 'link-btn', type: 'button', onclick: () => setPending([]) }, 'Cancelar'),
+    );
     hint.classList.add('hint-strong');
   } else {
     hint.classList.remove('hint-strong');
     hint.textContent = !anyOnline ? '' : matchMedia('(hover: hover)').matches
-      ? 'Hacé clic en un dispositivo para elegir archivos, o arrastralos encima.'
-      : 'Tocá un dispositivo para elegir qué archivos pasarle.';
+      ? 'Hacé clic en un dispositivo para pasarle archivos, una carpeta o un texto, o arrastralos encima.'
+      : 'Tocá un dispositivo para pasarle archivos, una carpeta o un texto.';
   }
+}
+
+function setPending(files: Source[], fromCloud = false) {
+  pendingShare = files;
+  pendingFromCloud = fromCloud;
+  updateHint();
 }
 
 async function connectCloud() {
@@ -275,16 +302,67 @@ function onDeviceClick(id: string) {
   // La ventana de Google y el selector de archivos necesitan cada uno su propio toque.
   if (id === CLOUD_ID && !drive.ready) return void connectCloud();
   if (pendingShare.length) {
+    if (id === CLOUD_ID && pendingFromCloud) return toast('Eso ya está en tu nube. Tocá otro dispositivo.');
     const files = pendingShare;
-    pendingShare = [];
-    updateHint();
+    setPending([]);
     sendTo(id, files);
     return;
   }
-  pickTarget = id;
-  const picker = $<HTMLInputElement>('picker');
-  picker.value = '';
-  picker.click();
+  openSendSheet(id);
+}
+
+// ------------------------------------------------------------------ qué pasar: archivos, carpeta o texto
+
+let sendTarget = '';
+const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+// iOS no deja elegir carpetas desde el navegador.
+const canPickFolder = 'webkitdirectory' in HTMLInputElement.prototype && !ios;
+
+for (const b of document.querySelectorAll<HTMLElement>('.choice')) b.prepend(svg(ICONS[b.dataset.icon as keyof typeof ICONS]));
+
+function openSendSheet(id: string) {
+  sendTarget = id;
+  $('send-title').textContent = id === CLOUD_ID ? 'Subir a tu nube' : `Pasar a ${nameOf(id)}`;
+  $('send-choices').hidden = false;
+  $('text-form').hidden = true;
+  $('send-folder').hidden = !canPickFolder;
+  $('send-text').hidden = id === CLOUD_ID;
+  $<HTMLDialogElement>('send-dlg').showModal();
+}
+
+function pick(inputId: string) {
+  pickTarget = sendTarget;
+  $<HTMLDialogElement>('send-dlg').close();
+  const input = $<HTMLInputElement>(inputId);
+  input.value = '';
+  input.click();
+}
+$('send-files').addEventListener('click', () => pick('picker'));
+$('send-folder').addEventListener('click', () => pick('folder-picker'));
+$('send-text').addEventListener('click', () => {
+  $('send-choices').hidden = true;
+  $('text-form').hidden = false;
+  $('text-input').focus();
+});
+
+$<HTMLFormElement>('text-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const input = $<HTMLTextAreaElement>('text-input');
+  const text = input.value.trim();
+  if (!text) return;
+  $<HTMLDialogElement>('send-dlg').close();
+  input.value = '';
+  sendTextTo(sendTarget, text);
+});
+
+function sendTextTo(peerId: string, text: string) {
+  if (!peers.some((p) => p.id === peerId)) return toast('Ese dispositivo no está conectado ahora.');
+  if (text.length > MAX_TEXT) return toast('Ese texto es muy largo para pasarlo así. Guardalo en un archivo y pasá el archivo.');
+  const name = nameOf(peerId);
+  manager.sendText(peerId, text).then(
+    () => toast(`Le pasaste el texto a ${name}.`),
+    (err) => toast((err as Error).message),
+  );
 }
 
 $<HTMLInputElement>('picker').addEventListener('change', (e) => {
@@ -293,18 +371,29 @@ $<HTMLInputElement>('picker').addEventListener('change', (e) => {
   pickTarget = null;
 });
 
+$<HTMLInputElement>('folder-picker').addEventListener('change', (e) => {
+  const input = e.target as HTMLInputElement;
+  if (pickTarget) {
+    if (input.files?.length) sendTo(pickTarget, zipsFromPicked([...input.files]));
+    else toast('Esa carpeta está vacía.');
+  }
+  pickTarget = null;
+});
+
 function attachDrop(li: HTMLElement, id: string) {
   let depth = 0;
+  const accepts = (e: DragEvent) =>
+    !!e.dataTransfer?.types.includes('Files') || (id !== CLOUD_ID && !!e.dataTransfer?.types.includes('text/plain'));
   li.addEventListener('dragenter', (e) => {
-    if (!e.dataTransfer?.types.includes('Files')) return;
+    if (!accepts(e)) return;
     e.preventDefault();
     depth++;
     li.classList.add('drop');
   });
   li.addEventListener('dragover', (e) => {
-    if (!e.dataTransfer?.types.includes('Files')) return;
+    if (!accepts(e)) return;
     e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
+    e.dataTransfer!.dropEffect = 'copy';
   });
   li.addEventListener('dragleave', () => {
     if (--depth <= 0) (depth = 0), li.classList.remove('drop');
@@ -313,9 +402,17 @@ function attachDrop(li: HTMLElement, id: string) {
     e.preventDefault();
     depth = 0;
     li.classList.remove('drop');
-    const files = [...(e.dataTransfer?.files ?? [])].filter((f) => f.size > 0 || f.type);
-    if (files.length) sendTo(id, files);
-    else toast('Por ahora no se pueden pasar carpetas enteras. Comprimila en un zip y pasá el zip.');
+    const dt = e.dataTransfer;
+    if (!dt) return;
+    if (!dt.types.includes('Files')) {
+      const text = dt.getData('text/plain').trim();
+      if (text && id !== CLOUD_ID) sendTextTo(id, text);
+      return;
+    }
+    readDropped(dt).then(
+      (files) => (files.length ? sendTo(id, files) : toast('No encontré archivos en lo que soltaste.')),
+      () => toast('No se pudo leer esa carpeta. Probá eligiéndola con "Una carpeta".'),
+    );
   });
 }
 // Evitar que el navegador abra el archivo si se suelta fuera de un dispositivo.
@@ -344,7 +441,7 @@ function updateDeviceRings() {
     const t = active[0];
     meta.textContent = waiting
       ? id === CLOUD_ID ? 'Preparando…' : t.status === 'connecting' ? 'Conectando…' : t.status === 'pending' ? 'Te quiere pasar algo' : 'Esperando que acepte'
-      : `${id === CLOUD_ID ? 'Subiendo' : t.direction === 'out' ? 'Enviando' : 'Recibiendo'} ${Math.floor(ratio * 100)}%`;
+      : `${id === CLOUD_ID ? (t.direction === 'in' ? 'Bajando' : 'Subiendo') : t.direction === 'out' ? 'Enviando' : 'Recibiendo'} ${Math.floor(ratio * 100)}%`;
   }
 }
 
@@ -370,7 +467,7 @@ function statusLine(t: Transfer): string {
     }
     case 'done': {
       const secs = ((t.endedAt ?? Date.now()) - t.startedAt) / 1000;
-      return `${t.peerId === CLOUD_ID ? 'Subido' : t.direction === 'out' ? 'Enviado' : 'Recibido'}: ${formatBytes(t.total)} en ${formatDuration(secs)}`;
+      return `${t.peerId === CLOUD_ID ? (t.direction === 'in' ? 'Bajado' : 'Subido') : t.direction === 'out' ? 'Enviado' : 'Recibido'}: ${formatBytes(t.total)} en ${formatDuration(secs)}`;
     }
     case 'declined': return t.direction === 'out' ? `${t.peerName} lo rechazó` : 'Lo rechazaste';
     case 'cancelled': return 'Cancelado';
@@ -497,6 +594,22 @@ function renderReceived() {
   const fmt = new Intl.DateTimeFormat('es-AR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
   $('received').replaceChildren(
     ...received.map((r) => {
+      if (r.text !== undefined) {
+        const link = linkIn(r.text);
+        return el('li', { class: 'row file' },
+          el('span', { class: 'thumb icon' }, svg(ICONS.text)),
+          el('div', { class: 'row-main' },
+            el('p', { class: 'row-title', title: r.text }, r.text),
+            el('p', { class: 'row-sub' }, `Texto, de ${r.from}, ${fmt.format(r.at)}`),
+            el('div', { class: 'row-actions' },
+              el('button', { class: 'btn btn-small btn-primary', type: 'button', onclick: () => copyText(r.text!) }, 'Copiar'),
+              link ? el('a', { class: 'btn btn-small', href: link, target: '_blank', rel: 'noopener' }, 'Abrir link') : null,
+              el('button', { class: 'btn btn-small', type: 'button', onclick: () => showText(r, `Texto de ${r.from}`) }, 'Ver'),
+              el('button', { class: 'link-btn danger', type: 'button', onclick: () => removeReceived(r) }, 'Borrar'),
+            ),
+          ),
+        );
+      }
       const thumb = r.type.startsWith('image/') && r.size < 40 * 2 ** 20
         ? el('img', { class: 'thumb', src: urlFor(r), alt: '', loading: 'lazy', decoding: 'async' })
         : el('span', { class: 'thumb icon' }, svg(fileIcon(r.type, r.name)));
@@ -521,6 +634,38 @@ function renderReceived() {
   );
   $('received-empty').hidden = received.length > 0;
   renderStorage();
+}
+
+/** El primer link del texto, para ofrecer abrirlo. */
+function linkIn(text: string): string | null {
+  return /https?:\/\/[^\s<>"']+/i.exec(text)?.[0] ?? null;
+}
+
+function showText(r: Received, title: string) {
+  $('text-title').textContent = title;
+  $('text-body').textContent = r.text ?? '';
+  const open = $<HTMLAnchorElement>('text-open');
+  const link = linkIn(r.text ?? '');
+  open.hidden = !link;
+  if (link) open.href = link;
+  $('text-copy').onclick = () => copyText(r.text ?? '');
+  const dlg = $<HTMLDialogElement>('text-dlg');
+  if (!dlg.open) dlg.showModal();
+}
+
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    // Sin https no hay navigator.clipboard: el método viejo sigue andando.
+    const ta = el('textarea', { readonly: true, style: 'position:fixed;opacity:0' }, text);
+    (document.querySelector('dialog[open]') ?? document.body).append(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    if (!ok) return toast('No se pudo copiar. Mantené apretado el texto para copiarlo a mano.');
+  }
+  toast('Copiado.');
 }
 
 async function removeReceived(r: Received) {
@@ -554,6 +699,15 @@ function renderCloud() {
           el('p', { class: 'row-title', title: f.name }, f.name),
           el('p', { class: 'row-sub' }, `${formatBytes(f.size)}, ${fmt.format(new Date(f.createdTime))}`),
           el('div', { class: 'row-actions' },
+            el('button', { class: 'btn btn-small btn-primary', type: 'button', onclick: () => drive.download(f) }, 'Bajar'),
+            el('button', {
+              class: 'btn btn-small', type: 'button',
+              onclick: () => {
+                if (!peers.length) return toast('No hay otros dispositivos conectados ahora.');
+                setPending([drive.source(f)], true);
+                $('devices-title').scrollIntoView({ behavior: 'smooth', block: 'start' });
+              },
+            }, 'Pasar a…'),
             el('a', { class: 'btn btn-small', href: f.webViewLink, target: '_blank', rel: 'noopener' }, 'Abrir en Drive'),
             el('button', {
               class: 'link-btn danger', type: 'button',

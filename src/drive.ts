@@ -3,7 +3,9 @@
 // no el resto del Drive. Las subidas son reanudables por trozos, así aguantan archivos de varios GB.
 
 import { isFinal, type Transfer } from './transfer';
+import { createSink, type Received, type Sink } from './store';
 import { randomHex } from './util';
+import type { Source } from './zip';
 
 export const CLOUD_ID = 'nube';
 const SCOPE = 'https://www.googleapis.com/auth/drive.file';
@@ -11,6 +13,7 @@ const API = 'https://www.googleapis.com/drive/v3';
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
 const CHUNK = 8 << 20; // Drive pide múltiplos de 256 KB
 const KEY = 'pasalo.drive';
+const EXPIRED = 'Se venció el permiso de Drive. Tocá "Tu nube" para conectar de nuevo.';
 
 export interface CloudFile {
   id: string;
@@ -30,6 +33,7 @@ export class Drive extends EventTarget {
   email = '';
   files: CloudFile[] = [];
   quota: { usage: number; limit: number } | null = null;
+  /** Subidas y bajadas, que se muestran como las demás transferencias. */
   readonly uploads = new Map<string, Transfer>();
   private token = '';
   private expires = 0;
@@ -143,7 +147,7 @@ export class Drive extends EventTarget {
     this.refresh().catch(() => this.emit());
   }
 
-  upload(files: File[]) {
+  upload(files: Source[]) {
     for (const file of files) {
       const t: Transfer = {
         id: randomHex(8), peerId: CLOUD_ID, peerName: 'tu nube', direction: 'out',
@@ -170,7 +174,7 @@ export class Drive extends EventTarget {
     this.dispatchEvent(new CustomEvent('change'));
   }
 
-  private async uploadOne(t: Transfer, file: File) {
+  private async uploadOne(t: Transfer, file: Source) {
     if (t.status === 'cancelled') return;
     const ctl = new AbortController();
     this.aborts.set(t.id, ctl);
@@ -205,7 +209,7 @@ export class Drive extends EventTarget {
             method: 'PUT',
             signal: ctl.signal,
             headers: { 'Content-Range': file.size ? `bytes ${offset}-${end - 1}/${file.size}` : 'bytes */0' },
-            body: file.slice(offset, end),
+            body: await file.slice(offset, end).arrayBuffer(),
           });
         } catch (e) {
           if (ctl.signal.aborted) throw e;
@@ -247,6 +251,95 @@ export class Drive extends EventTarget {
     }
   }
 
+  /** Baja un archivo de la nube a los recibidos de este dispositivo (a disco si se puede, como lo que llega de otro). */
+  download(f: CloudFile) {
+    const t: Transfer = {
+      id: randomHex(8), peerId: CLOUD_ID, peerName: 'tu nube', direction: 'in',
+      files: [{ name: f.name, size: f.size, type: f.mimeType }],
+      total: f.size, bytes: 0, index: 0, status: 'active', speed: 0, startedAt: Date.now(),
+    };
+    this.uploads.set(t.id, t);
+    this.changed(t);
+    this.downloadOne(t, f);
+  }
+
+  private async downloadOne(t: Transfer, f: CloudFile) {
+    const ctl = new AbortController();
+    this.aborts.set(t.id, ctl);
+    let sink: Sink | null = null;
+    try {
+      if (!this.ready) throw new Error(EXPIRED);
+      let written = 0;
+      let wake: (() => void) | null = null;
+      sink = await createSink(t.id, { name: f.name, size: f.size, type: f.mimeType, from: 'tu nube' }, (n) => {
+        written += n;
+        wake?.();
+      });
+      const src = this.source(f, ctl.signal);
+      for (let off = 0; off < f.size; off += CHUNK) {
+        const t0 = performance.now();
+        const buf = await src.slice(off, off + CHUNK).arrayBuffer();
+        sink.write(buf);
+        const inst = buf.byteLength / Math.max(0.001, (performance.now() - t0) / 1000);
+        t.speed = t.speed ? t.speed * 0.7 + inst * 0.3 : inst;
+        t.bytes = off + buf.byteLength;
+        this.changed(t);
+        // No adelantarse mucho al disco, así no se llena la memoria.
+        while (t.bytes - written > 4 * CHUNK) await new Promise<void>((r) => (wake = () => ((wake = null), r())));
+      }
+      const rec = await sink.finish();
+      sink = null;
+      t.status = 'done';
+      t.endedAt = Date.now();
+      this.dispatchEvent(new CustomEvent<Received>('received', { detail: rec }));
+    } catch (e) {
+      await sink?.abort();
+      if ((t.status as Transfer['status']) !== 'cancelled') {
+        t.status = 'error';
+        t.error = (e as Error).message || 'No se pudo bajar de Drive.';
+        t.endedAt = Date.now();
+      }
+    } finally {
+      this.aborts.delete(t.id);
+      this.changed(t);
+    }
+  }
+
+  /**
+   * Un archivo de la nube como origen para pasarlo a otro dispositivo: se va bajando de a pedazos
+   * mientras se manda, sin guardarlo en este.
+   * shortcut: usa el permiso de una hora; si vence a mitad de un archivo enorme se corta. Renovarlo solo
+   * necesitaría un toque (la ventana de Google), así que por ahora se avisa y se vuelve a pasar.
+   */
+  source(f: CloudFile, signal?: AbortSignal): Source {
+    return {
+      name: f.name,
+      size: f.size,
+      type: f.mimeType,
+      slice: (a, b) => ({
+        arrayBuffer: async () => {
+          b = Math.min(b, f.size);
+          for (let tries = 0; ; ) {
+            let res: Response | null = null;
+            try {
+              res = await fetch(`${API}/files/${f.id}?alt=media`, {
+                signal,
+                headers: { Authorization: `Bearer ${this.token}`, Range: `bytes=${a}-${b - 1}` },
+              });
+            } catch (e) {
+              if (signal?.aborted) throw e;
+            }
+            if (res && (res.status === 206 || (res.ok && a === 0 && b === f.size))) return res.arrayBuffer();
+            if (res?.status === 401) throw this.expire();
+            if (res && res.status < 500 && res.status !== 429) throw new Error(await driveError(res));
+            if (++tries > 5) throw new Error('Se cortó la conexión con Drive varias veces. Revisá internet y probá de nuevo.');
+            await sleep(1000 * 2 ** tries);
+          }
+        },
+      }),
+    };
+  }
+
   private async folderId(): Promise<string> {
     if (this.folder) return this.folder;
     const q = encodeURIComponent("name='Pasalo' and mimeType='application/vnd.google-apps.folder' and trashed=false");
@@ -261,14 +354,16 @@ export class Drive extends EventTarget {
 
   private async api(path: string, init: RequestInit = {}): Promise<any> {
     const res = await fetch(API + path, { ...init, headers: { ...(init.headers as Record<string, string>), Authorization: `Bearer ${this.token}` } });
-    if (res.status === 401) {
-      this.token = '';
-      this.save();
-      this.emit();
-      throw new Error('Se venció el permiso de Drive. Tocá "Tu nube" para conectar de nuevo.');
-    }
+    if (res.status === 401) throw this.expire();
     if (!res.ok) throw new Error(await driveError(res));
     return res.json();
+  }
+
+  private expire(): Error {
+    this.token = '';
+    this.save();
+    this.emit();
+    return new Error(EXPIRED);
   }
 
   private save() {

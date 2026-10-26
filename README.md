@@ -8,13 +8,16 @@ Y si querés tener algo a mano en todos tus dispositivos, cada persona puede con
 
 ## Qué hace
 
-- **Encuentra solos** los dispositivos que están en tu misma wifi. Tocás uno, elegís los archivos y listo.
+- **Encuentra solos** los dispositivos que están en tu misma wifi. Tocás uno, elegís qué pasarle y listo.
 - **Cualquier dispositivo con cualquier otro**, sea de quien sea: los de otras redes se vinculan una vez con un código de 6 números.
 - **Archivos de cualquier tamaño**: de una foto a un zip de varios GB. El que recibe tiene que aceptar.
+- **Carpetas enteras**, sin comprimirlas antes: llegan como un zip que se arma mientras se manda, con las subcarpetas.
+- **Texto y links**: escribís o pegás algo y al otro le aparece para copiarlo o abrir el link.
 - **Guarda a disco mientras llega** (en Chrome, Edge, Android y Safari de iOS 26 o más nuevo), así no llena la memoria.
 - **Progreso en vivo**: un anillo alrededor de cada dispositivo, con velocidad, tiempo restante y cancelar.
 - **Recibidos**: quedan en la app hasta que los borres, con Descargar, Abrir y Compartir (en el celular, para guardarlos en Fotos o Archivos).
 - **Tu nube** (opcional): sube a una carpeta "Pasalo" de tu Google Drive y la ves desde todos tus dispositivos.
+  Desde ahí lo bajás a cualquiera de los tuyos o se lo pasás a otro dispositivo.
 - **Compartir → Pasalo** en Android, con la app instalada.
 - Tema claro, oscuro o automático. Mantiene la pantalla encendida mientras transfiere.
 
@@ -120,7 +123,11 @@ y el otro lo escribe. Se hace una sola vez.
 
 Opcional. Cada persona conecta **su propio** Google Drive y usa **su propio** espacio: el círculo "Tu nube" sube a una
 carpeta "Pasalo" y el panel "Tu nube" lista lo subido en todos sus dispositivos. Las subidas van por partes y se
-retoman si se corta internet. Borrar manda a la papelera de Drive.
+retoman si se corta internet. En cada archivo:
+
+- **Bajar**: lo trae a Recibidos de ese dispositivo (a disco, como lo que te pasan).
+- **Pasar a…**: tocás otro dispositivo, aunque sea de otra persona, y se lo manda bajándolo de a pedazos, sin guardarlo en el tuyo.
+- **Borrar**: lo manda a la papelera de Drive.
 
 Para activarlo hace falta un **ID de cliente** de Google, gratis. Se saca una sola vez (unos 10 minutos):
 
@@ -188,13 +195,15 @@ El servidor anota lo que pasa en la ventana negra (y en `servidor.log` si usás 
 - Los dos dispositivos tienen que tener Pasalo abierto al mismo tiempo.
 - En iPhone con iOS anterior al 26, lo recibido va a memoria: bien para fotos y documentos, no para archivos de varios GB.
 - Si el celular bloquea la pantalla o cambia de app, el sistema puede cortar la transferencia.
-- Carpetas: por ahora hay que comprimirlas en un zip.
+- En iPhone no se pueden elegir carpetas (iOS no lo deja desde el navegador). En la compu se eligen o se arrastran.
+- El permiso de Google Drive dura una hora: si vence a mitad de bajar o pasar un archivo de la nube muy grande,
+  se corta y hay que volver a tocar "Tu nube". Las subidas no se cortan.
 
 ## Desarrollo
 
 | Parte | Tecnología |
 |---|---|
-| App | TypeScript + Vite, sin framework (≈20 KB comprimida) |
+| App | TypeScript + Vite, sin framework (≈25 KB comprimida) |
 | Servidor | Node.js + `ws` |
 | Transferencia | WebRTC DataChannel, con puente por WebSocket de respaldo |
 | Guardado | OPFS (Origin Private File System), escribe a disco mientras llega |
@@ -209,11 +218,12 @@ npm run build      # compila a dist/
 ```
 
 **Pruebas.** `tests/e2e.mjs` abre dos navegadores con Playwright y prueba un archivo de 300 MB (verificado con SHA-256),
-rechazar, cancelar, recargar, vincular con código, quitar dispositivos, el tema y "Tu nube" (con Google Drive simulado):
+rechazar, cancelar, recargar, vincular con código, quitar dispositivos, el tema, texto y links, carpetas y "Tu nube"
+(con Google Drive simulado: subir, bajar y pasar a otro dispositivo):
 
 ```bash
 npm i --no-save playwright && npx playwright install chromium
-PORT=3100 npm start        # en otra terminal
+GOOGLE_CLIENT_ID= PORT=3100 npm start        # en otra terminal, sin tu ID de Google
 npm run test:e2e           # RELAY=1 npm run test:e2e fuerza el puente por el servidor
 ```
 
@@ -227,7 +237,8 @@ src/peer.ts         conexión WebRTC
 src/relay.ts        conexión por el servidor cuando la directa no se arma
 src/signaling.ts    cliente del WebSocket con reconexión
 src/store.ts        guardado de lo recibido (disco o memoria)
-src/drive.ts        Tu nube: Google Drive (permiso, subida reanudable, lista, papelera)
+src/drive.ts        Tu nube: Google Drive (permiso, subida reanudable, bajar, pasar, papelera)
+src/zip.ts          carpetas: zip armado al vuelo (sin comprimir, ZIP64 si pasa los 4 GB)
 src/identity.ts     nombre e identidad del dispositivo, vinculados
 src/share.ts        archivos que llegan desde "Compartir" (Android)
 public/sw.js        service worker (offline y Compartir)

@@ -11,6 +11,10 @@
 //                               ← {t:received, id}
 //  {t:cancel, id}             ↔  (cualquiera de los dos, en cualquier momento)
 //
+//  Texto o link, sin pedir permiso:
+//  {t:text, id, text}          →
+//                               ← {t:received, id}
+//
 // El emisor no se adelanta más de WINDOW bytes a lo que el receptor confirmó como
 // escrito, así un celular lento no se queda sin memoria.
 
@@ -22,6 +26,7 @@ const DIRECT_TIMEOUT = 8000;
 import type { Signaling, SignalData } from './signaling';
 import { createSink, type Received, type Sink } from './store';
 import { randomHex } from './util';
+import type { Source } from './zip';
 
 export interface FileMeta {
   name: string;
@@ -52,16 +57,18 @@ export interface Transfer {
 const WINDOW = 16 << 20;
 const READ_BLOCK = 4 << 20;
 const ACK_EVERY = 2 << 20;
+export const MAX_TEXT = 10_000;
 
 type Ctl =
   | { t: 'offer'; id: string; files: FileMeta[]; total: number }
   | { t: 'accept' | 'decline' | 'cancel' | 'done' | 'received'; id: string }
   | { t: 'file' | 'file-end'; id: string; index: number }
-  | { t: 'ack'; id: string; bytes: number };
+  | { t: 'ack'; id: string; bytes: number }
+  | { t: 'text'; id: string; text: string };
 
 interface Outgoing {
   t: Transfer;
-  files: File[];
+  files: Source[];
   link?: Link;
   acked: number;
   answer?: (accepted: boolean) => void;
@@ -90,6 +97,7 @@ export class TransferManager extends EventTarget {
   private incoming = new Map<string, Incoming>(); // por id de transferencia
   private currentIn = new Map<string, Incoming>(); // por peer: la que está recibiendo trozos
   private queues = new Map<string, Promise<unknown>>();
+  private textAcks = new Map<string, () => void>();
   private speedTimer = 0;
 
   constructor(
@@ -197,7 +205,7 @@ export class TransferManager extends EventTarget {
 
   // ------------------------------------------------------------ envío
 
-  send(peerId: string, files: File[]): Transfer {
+  send(peerId: string, files: Source[]): Transfer {
     const t: Transfer = {
       id: randomHex(8),
       peerId,
@@ -280,6 +288,20 @@ export class TransferManager extends EventTarget {
       if (!o.aborted) this.fail(t, (err as Error).message);
       o.aborted = true;
     }
+  }
+
+  /** Pasa un texto o link. Se resuelve cuando el otro lo recibió. */
+  async sendText(peerId: string, text: string): Promise<void> {
+    const l = await this.connect(peerId);
+    const id = randomHex(8);
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.textAcks.delete(id);
+        reject(new Error('El otro dispositivo no respondió. Probá de nuevo.'));
+      }, 15_000);
+      this.textAcks.set(id, () => (clearTimeout(timer), resolve()));
+      l.sendJson({ t: 'text', id, text: text.slice(0, MAX_TEXT) } satisfies Ctl);
+    });
   }
 
   private abortOut(o: Outgoing) {
@@ -395,7 +417,15 @@ export class TransferManager extends EventTarget {
         w?.();
         break;
       }
+      case 'text': {
+        if (typeof m.text !== 'string' || !m.text) return;
+        this.dispatchEvent(new CustomEvent('text', { detail: { peerId, peerName: this.peerName(peerId), text: m.text.slice(0, MAX_TEXT) } }));
+        this.trySend(l, { t: 'received', id: m.id });
+        break;
+      }
       case 'received': {
+        const ack = this.textAcks.get(m.id);
+        if (ack) return void (this.textAcks.delete(m.id), ack());
         const o = this.outgoing.get(m.id);
         if (o?.t.peerId === peerId) o.delivered?.();
         break;

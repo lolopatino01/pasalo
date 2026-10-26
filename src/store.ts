@@ -12,6 +12,8 @@ export interface Received {
   at: number;
   file: Blob;
   persisted: boolean;
+  /** Si es un texto o link que te pasaron. */
+  text?: string;
 }
 
 export interface Sink {
@@ -95,7 +97,7 @@ export async function deleteSaved(item: Received): Promise<void> {
 
 export async function createSink(
   id: string,
-  meta: { name: string; size: number; type: string; from: string },
+  meta: { name: string; size: number; type: string; from: string; text?: string },
   onWritten: (bytes: number) => void,
 ): Promise<Sink> {
   const at = Date.now();
@@ -171,4 +173,12 @@ export async function createSink(
       parts.length = 0;
     },
   };
+}
+
+/** Guarda un texto recibido como cualquier otro recibido (queda después de recargar). */
+export async function saveText(id: string, text: string, from: string): Promise<Received> {
+  const data = new TextEncoder().encode(text);
+  const sink = await createSink(id, { name: `Texto de ${from}.txt`, size: data.byteLength, type: 'text/plain', from, text }, () => {});
+  sink.write(data.buffer);
+  return sink.finish();
 }

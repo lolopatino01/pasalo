@@ -95,6 +95,43 @@
       </form>
     </dialog>
 
+    <dialog id="send-dlg" class="sheet" aria-labelledby="send-title">
+      <div class="sheet-head">
+        <h2 id="send-title"></h2>
+        <button class="icon-btn close" type="button" data-close aria-label="Cerrar">×</button>
+      </div>
+      <div id="send-choices" class="choices">
+        <button id="send-files" class="choice" type="button" data-icon="file">
+          <span><strong>Archivos</strong><span class="muted small">Fotos, videos, documentos</span></span>
+        </button>
+        <button id="send-folder" class="choice" type="button" data-icon="folder">
+          <span><strong>Una carpeta</strong><span class="muted small">Llega como un zip con todo lo de adentro</span></span>
+        </button>
+        <button id="send-text" class="choice" type="button" data-icon="text">
+          <span><strong>Texto o link</strong><span class="muted small">Para copiarlo o abrirlo en el otro</span></span>
+        </button>
+      </div>
+      <form id="text-form" class="field" hidden>
+        <label for="text-input">Texto o link</label>
+        <textarea id="text-input" rows="5" maxlength="10000" required placeholder="Escribí o pegá acá"></textarea>
+        <div class="actions">
+          <button class="btn btn-primary" type="submit">Pasar</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="text-dlg" class="sheet" aria-labelledby="text-title">
+      <div class="sheet-head">
+        <h2 id="text-title"></h2>
+        <button class="icon-btn close" type="button" data-close aria-label="Cerrar">×</button>
+      </div>
+      <p id="text-body" class="text-body"></p>
+      <div class="actions">
+        <a id="text-open" class="btn" target="_blank" rel="noopener" hidden>Abrir link</a>
+        <button id="text-copy" class="btn btn-primary" type="button">Copiar</button>
+      </div>
+    </dialog>
+
     <dialog id="pair-dlg" class="sheet" aria-labelledby="pair-title">
       <div class="sheet-head">
         <h2 id="pair-title">Vincular un dispositivo</h2>
@@ -177,6 +214,7 @@
 
     <div id="toasts" class="toasts" aria-live="polite"></div>
     <input id="picker" type="file" multiple hidden />
+    <input id="folder-picker" type="file" webkitdirectory hidden />
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
