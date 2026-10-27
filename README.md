@@ -7,8 +7,9 @@
 **Pasá archivos, carpetas y textos directo entre tus dispositivos.**<br>
 Compu, iPhone, Android y tablet, en cualquier dirección. Sin cables, sin instalar nada y sin pasar por ningún servidor.
 
-<sub><b>English:</b> a free, open-source AirDrop for every device: send files, folders and text peer-to-peer, right from the browser. The app speaks English and Spanish.</sub>
+<sub><b>Español</b> · <a href="README.en.md">English</a></sub>
 
+[![Pruebas](https://github.com/lolopatino01/pasalo/actions/workflows/ci.yml/badge.svg)](https://github.com/lolopatino01/pasalo/actions/workflows/ci.yml)
 [![Licencia MIT](https://img.shields.io/badge/licencia-MIT-2F4BFF?style=flat-square)](LICENSE)
 [![PWA](https://img.shields.io/badge/PWA-instalable-2F4BFF?style=flat-square)](#instalación)
 [![WebRTC](https://img.shields.io/badge/WebRTC-P2P%20cifrado-12805A?style=flat-square)](#cómo-funciona)
@@ -264,7 +265,8 @@ npm run build      # compila a dist/
 
 **Pruebas.** `tests/e2e.mjs` abre dos navegadores con Playwright y prueba un archivo de 300 MB (verificado con SHA-256),
 rechazar, cancelar, recargar, vincular con código, quitar dispositivos, el tema, texto y links, carpetas, el inglés y
-el cambio de idioma, y "Tu nube" (con Google Drive simulado: subir, bajar y pasar a otro dispositivo):
+el cambio de idioma, y "Tu nube" (con Google Drive simulado: subir, bajar y pasar a otro dispositivo). Corren solas en
+GitHub con cada cambio, con conexión directa y por el servidor:
 
 ```bash
 npm i --no-save playwright && npx playwright install chromium
