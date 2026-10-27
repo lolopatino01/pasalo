@@ -17,6 +17,8 @@ Computer, iPhone, Android and tablet, in any direction. No cables, nothing to in
 [![Node.js](https://img.shields.io/badge/Node.js-22.12%2B-339933?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org)
 [![Stars](https://img.shields.io/github/stars/lolopatino01/pasalo?style=flat-square&color=2F4BFF)](https://github.com/lolopatino01/pasalo/stargazers)
 
+**[⬇ Download for Windows](https://github.com/lolopatino01/pasalo/releases/latest/download/Pasalo-windows.zip)** · [Try it in 2 minutes](#try-it-in-2-minutes)
+
 [How it works](#how-it-works) · [Installation](#installation) · [From your phone](#using-it-from-phones-and-tablets) · [Your cloud](#your-cloud-google-drive) · [Privacy](#privacy-and-security)
 
 <br>
@@ -26,6 +28,22 @@ Computer, iPhone, Android and tablet, in any direction. No cables, nothing to in
 <sub>Screenshots show the Spanish interface; the app switches to English automatically when your browser is in English.</sub>
 
 </div>
+
+## Try it in 2 minutes
+
+**Windows:** download [**Pasalo-windows.zip**](https://github.com/lolopatino01/pasalo/releases/latest/download/Pasalo-windows.zip),
+unzip it and double-click `iniciar-pasalo.bat`. It comes prebuilt; if you don't have Node.js, it installs it for you.
+
+**Linux, macOS or Windows with Node.js 22.12+:**
+
+```bash
+git clone https://github.com/lolopatino01/pasalo.git && cd pasalo
+npm install && npm run build && npm start
+```
+
+It opens at `http://localhost:3000`. On your phone, open the address shown in the window
+(`http://computer-IP:3000`, on the same wifi), tap the other device and choose what to send.
+More in [Installation](#installation).
 
 ## Why Pasalo?
 
@@ -105,11 +123,10 @@ You need a computer that stays on while Pasalo is in use.
 
 ### On Windows (easiest)
 
-1. Get the project: green **Code → Download ZIP** button and unzip it, or with git:
-   ```bash
-   git clone https://github.com/lolopatino01/pasalo.git
-   ```
-2. Double-click **`iniciar-pasalo.bat`**. The first time, it installs Node.js if missing and sets everything up.
+1. Download [**Pasalo-windows.zip**](https://github.com/lolopatino01/pasalo/releases/latest/download/Pasalo-windows.zip)
+   from the latest version in [Releases](https://github.com/lolopatino01/pasalo/releases) and unzip it.
+   It comes prebuilt. If you want the code to modify it, use `git clone` (the .bat builds it on start).
+2. Double-click **`iniciar-pasalo.bat`**. The first time, it installs Node.js if missing.
    If Windows asks about the firewall, allow access on **private networks**.
 3. Pasalo opens in your browser. The black window shows the addresses to open it from your other devices.
    Keep it open while you use it; **`detener-pasalo.bat`** stops it.

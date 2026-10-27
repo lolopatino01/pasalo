@@ -30,9 +30,12 @@ if not exist node_modules (
   echo Instalando dependencias...
   call npm install --no-audit --no-fund >install.log 2>&1
 )
-echo Compilando la app...
-call npm run build >build.log 2>&1
-if errorlevel 1 echo (No se pudo compilar, uso la version que ya venia armada. Detalle en build.log)
+rem El zip de Releases viene armado y sin src: no hace falta compilar.
+if exist src\ (
+  echo Compilando la app...
+  call npm run build >build.log 2>&1
+  if errorlevel 1 echo (No se pudo compilar, uso la version que ya venia armada. Detalle en build.log)
+)
 
 rem Tailscale en Windows no conecta si su app no esta abierta: la abro, espero a que conecte y publico el puerto con https.
 set "TS=%ProgramFiles%\Tailscale\tailscale.exe"

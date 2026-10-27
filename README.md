@@ -17,6 +17,8 @@ Compu, iPhone, Android y tablet, en cualquier dirección. Sin cables, sin instal
 [![Node.js](https://img.shields.io/badge/Node.js-22.12%2B-339933?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org)
 [![Estrellas](https://img.shields.io/github/stars/lolopatino01/pasalo?style=flat-square&color=2F4BFF)](https://github.com/lolopatino01/pasalo/stargazers)
 
+**[⬇ Descargar para Windows](https://github.com/lolopatino01/pasalo/releases/latest/download/Pasalo-windows.zip)** · [Probalo en 2 minutos](#probalo-en-2-minutos)
+
 [Cómo funciona](#cómo-funciona) · [Instalación](#instalación) · [Desde el celular](#usarlo-desde-el-celular-y-la-tablet) · [Tu nube](#tu-nube-google-drive) · [Privacidad](#privacidad-y-seguridad)
 
 <br>
@@ -24,6 +26,22 @@ Compu, iPhone, Android y tablet, en cualquier dirección. Sin cables, sin instal
 <img src="docs/hero.png" alt="Pasalo en una compu mandándole un video a un iPhone, con el anillo de progreso alrededor de cada dispositivo">
 
 </div>
+
+## Probalo en 2 minutos
+
+**Windows:** bajá [**Pasalo-windows.zip**](https://github.com/lolopatino01/pasalo/releases/latest/download/Pasalo-windows.zip),
+descomprimilo y hacé doble clic en `iniciar-pasalo.bat`. Viene armado; si no tenés Node.js, lo instala solo.
+
+**Linux, macOS o Windows con Node.js 22.12+:**
+
+```bash
+git clone https://github.com/lolopatino01/pasalo.git && cd pasalo
+npm install && npm run build && npm start
+```
+
+Se abre en `http://localhost:3000`. Desde el celular, abrí la dirección que muestra la ventana
+(`http://IP-de-la-compu:3000`, con la misma wifi), tocá el otro dispositivo y elegí qué pasarle.
+Más detalles en [Instalación](#instalación).
 
 ## ¿Por qué Pasalo?
 
@@ -103,11 +121,10 @@ Necesitás una compu que quede prendida mientras usan Pasalo.
 
 ### En Windows (lo más fácil)
 
-1. Bajá el proyecto: botón verde **Code → Download ZIP** y descomprimilo, o con git:
-   ```bash
-   git clone https://github.com/lolopatino01/pasalo.git
-   ```
-2. Doble clic en **`iniciar-pasalo.bat`**. La primera vez instala Node.js si falta y prepara todo.
+1. Bajá [**Pasalo-windows.zip**](https://github.com/lolopatino01/pasalo/releases/latest/download/Pasalo-windows.zip)
+   de la última versión en [Releases](https://github.com/lolopatino01/pasalo/releases) y descomprimilo.
+   Viene compilado. Si querés el código para modificarlo, usá `git clone` (el .bat lo compila al arrancar).
+2. Doble clic en **`iniciar-pasalo.bat`**. La primera vez instala Node.js si falta.
    Si Windows pregunta por el firewall, permití el acceso en **redes privadas**.
 3. Se abre Pasalo en el navegador. La ventana negra muestra las direcciones para abrirlo desde los otros dispositivos.
    Dejala abierta mientras lo uses; **`detener-pasalo.bat`** lo apaga.
