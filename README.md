@@ -128,6 +128,8 @@ Necesitás una compu que quede prendida mientras usan Pasalo.
    Si Windows pregunta por el firewall, permití el acceso en **redes privadas**.
 3. Se abre Pasalo en el navegador. La ventana negra muestra las direcciones para abrirlo desde los otros dispositivos.
    Dejala abierta mientras lo uses; **`detener-pasalo.bat`** lo apaga.
+4. Opcional: en **Ajustes → Arrancar con Windows** (solo aparece en la compu donde corre Pasalo) elegí **Activado**
+   y se prende solo cada vez que inicia la compu, sin abrir ninguna ventana.
 
 ### En cualquier sistema (Linux, macOS, Windows)
 

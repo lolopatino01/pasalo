@@ -129,6 +129,15 @@ const EN: Record<string, string> = {
   'Claro': 'Light',
   'Oscuro': 'Dark',
   'Idioma': 'Language',
+  'Arrancar con Windows': 'Start with Windows',
+  'Activado': 'On',
+  'Desactivado': 'Off',
+  'Pasalo se prende solo al iniciar la compu, sin abrir ninguna ventana. Para apagarlo, usá detener-pasalo.bat.':
+    'Pasalo starts on its own when the computer starts, without opening any window. To stop it, use detener-pasalo.bat.',
+  'Listo: Pasalo se va a prender solo cuando inicies la compu.': 'Done: Pasalo will start on its own when you start the computer.',
+  'Listo: Pasalo ya no se prende solo con la compu.': 'Done: Pasalo no longer starts with the computer.',
+  'No se pudo cambiar el inicio con Windows. Fijate que Pasalo siga andando y probá de nuevo.':
+    "Couldn't change starting with Windows. Check that Pasalo is still running and try again.",
   'Dispositivos quitados': 'Removed devices',
   'Instalar': 'Install',
   'Instalar Pasalo': 'Install Pasalo',

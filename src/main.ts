@@ -35,6 +35,7 @@ fetch('/config.json')
   .then((c) => {
     if (Array.isArray(c.iceServers)) iceServers = c.iceServers;
     if (typeof c.googleClientId === 'string') drive.init(c.googleClientId);
+    if (typeof c.autostart === 'boolean') renderAutostart(c.autostart);
   })
   .catch(() => {});
 
@@ -1037,6 +1038,26 @@ for (const b of document.querySelectorAll<HTMLButtonElement>('[data-lang-choice]
     if (allTransfers().some((t) => !isFinal(t.status))) return toast('Esperá a que terminen las transferencias para cambiar el idioma.');
     setLangChoice(b.dataset.langChoice as LangChoice);
     location.reload();
+  });
+}
+
+// ------------------------------------------------------------------ inicio con Windows (solo en la compu del servidor)
+
+function renderAutostart(on: boolean) {
+  $('autostart-field').hidden = false;
+  for (const b of document.querySelectorAll<HTMLButtonElement>('[data-autostart]')) {
+    b.setAttribute('aria-checked', String((b.dataset.autostart === 'on') === on));
+  }
+}
+for (const b of document.querySelectorAll<HTMLButtonElement>('[data-autostart]')) {
+  b.addEventListener('click', () => {
+    fetch('/autostart', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ on: b.dataset.autostart === 'on' }) })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((c: { autostart: boolean }) => {
+        renderAutostart(c.autostart);
+        toast(c.autostart ? 'Listo: Pasalo se va a prender solo cuando inicies la compu.' : 'Listo: Pasalo ya no se prende solo con la compu.');
+      })
+      .catch(() => toast('No se pudo cambiar el inicio con Windows. Fijate que Pasalo siga andando y probá de nuevo.'));
   });
 }
 

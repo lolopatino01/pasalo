@@ -101,12 +101,52 @@ function serveStatic(req, res) {
   });
 }
 
+// Inicio con Windows: un .vbs en la carpeta Inicio del usuario que corre iniciar-pasalo.bat sin ventana.
+const STARTUP_FILE = process.platform === 'win32' && process.env.APPDATA && fs.existsSync(path.join(ROOT, 'iniciar-pasalo.bat'))
+  ? path.join(process.env.APPDATA, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'Pasalo.vbs')
+  : '';
+
+/** Solo desde el navegador de la misma compu (no por Tailscale ni otro proxy, ni con otro Host). */
+function canAutostart(req) {
+  const remote = (req.socket.remoteAddress || '').replace(/^::ffff:/, '');
+  const host = String(req.headers.host || '');
+  return Boolean(STARTUP_FILE) && (remote === '127.0.0.1' || remote === '::1') && !req.headers['x-forwarded-for'] &&
+    (host === `localhost:${PORT}` || host === `127.0.0.1:${PORT}`);
+}
+
 function handleApi(req, res) {
   const { pathname } = new URL(req.url, 'http://x');
   if (pathname === '/config.json') {
     res.writeHead(200, { ...SECURITY_HEADERS, 'Content-Type': MIME['.json'], 'Cache-Control': 'no-store' });
     // El Client ID de Google no es secreto: identifica a la app ante Google (ver README, "Nube").
-    res.end(JSON.stringify({ iceServers: iceServers(), googleClientId: process.env.GOOGLE_CLIENT_ID || '', build: currentBuild() }));
+    res.end(JSON.stringify({
+      iceServers: iceServers(), googleClientId: process.env.GOOGLE_CLIENT_ID || '', build: currentBuild(),
+      ...(canAutostart(req) && { autostart: fs.existsSync(STARTUP_FILE) }),
+    }));
+    return true;
+  }
+  if (pathname === '/autostart' && req.method === 'POST') {
+    // Pedir JSON obliga al navegador a preguntar antes (CORS): otra página no puede tocar esto.
+    if (!canAutostart(req) || !String(req.headers['content-type']).startsWith('application/json')) {
+      res.writeHead(403, SECURITY_HEADERS).end();
+      return true;
+    }
+    let body = '';
+    req.on('data', (c) => { body = (body + c).slice(0, 100); });
+    req.on('end', () => {
+      try {
+        if (JSON.parse(body).on === true) {
+          // VBScript con BOM UTF-16 para que ande con tildes en la ruta; ventana 0 = oculta.
+          const bat = path.join(ROOT, 'iniciar-pasalo.bat').replaceAll('"', '""');
+          const vbs = `' Lo crea y lo borra Pasalo (Ajustes > Arrancar con Windows).\r\nCreateObject("WScript.Shell").Run """${bat}"" inicio", 0, False\r\n`;
+          fs.writeFileSync(STARTUP_FILE, '﻿' + vbs, 'utf16le');
+        } else fs.rmSync(STARTUP_FILE, { force: true });
+        res.writeHead(200, { ...SECURITY_HEADERS, 'Content-Type': MIME['.json'] }).end(JSON.stringify({ autostart: fs.existsSync(STARTUP_FILE) }));
+      } catch (err) {
+        log(`[inicio con Windows] ${err.message}`);
+        res.writeHead(500, SECURITY_HEADERS).end();
+      }
+    });
     return true;
   }
   if (pathname === '/health') {

@@ -130,6 +130,8 @@ You need a computer that stays on while Pasalo is in use.
    If Windows asks about the firewall, allow access on **private networks**.
 3. Pasalo opens in your browser. The black window shows the addresses to open it from your other devices.
    Keep it open while you use it; **`detener-pasalo.bat`** stops it.
+4. Optional: in **Settings → Start with Windows** (only shown on the computer running Pasalo) choose **On**
+   and it starts on its own every time the computer starts, without opening any window.
 
 ### On any system (Linux, macOS, Windows)
 

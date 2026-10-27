@@ -9,6 +9,22 @@ echo   Pasalo
 echo   ======
 echo.
 
+rem "inicio" = lo arranca Windows al prender la compu, sin ventana: no abre el navegador ni espera una tecla.
+set "INICIO="
+if /i "%~1"=="inicio" set "INICIO=1"
+
+rem Si ya esta andando (por ejemplo, porque arranco con Windows), solo abro el navegador.
+rem 127.0.0.1 y no localhost: PowerShell prueba primero ::1 y tarda mas que el limite.
+powershell -NoProfile -Command "try{$null=Invoke-WebRequest http://127.0.0.1:3000/health -UseBasicParsing -TimeoutSec 2; exit 0}catch{exit 1}"
+if not errorlevel 1 (
+  if not defined INICIO (
+    echo Pasalo ya esta andando. Abro el navegador.
+    start "" http://localhost:3000
+    timeout /t 2 >nul
+  )
+  exit /b 0
+)
+
 where node >nul 2>nul
 if errorlevel 1 (
   if exist "%ProgramFiles%\nodejs\node.exe" (
@@ -22,7 +38,7 @@ if errorlevel 1 (
 where node >nul 2>nul
 if errorlevel 1 (
   echo No se pudo instalar Node.js. Bajalo de https://nodejs.org e intenta de nuevo.
-  pause
+  if not defined INICIO pause
   exit /b 1
 )
 
@@ -50,6 +66,6 @@ echo.
 echo   Si Windows pregunta por el firewall, permiti el acceso en redes privadas.
 echo   Deja esta ventana abierta mientras uses Pasalo. Cerrala para apagarlo.
 echo.
-start "" /min powershell -NoProfile -WindowStyle Hidden -Command "Start-Sleep 2; Start-Process 'http://localhost:3000'"
+if not defined INICIO start "" /min powershell -NoProfile -WindowStyle Hidden -Command "Start-Sleep 2; Start-Process 'http://localhost:3000'"
 powershell -NoProfile -Command "node server\index.js 2>&1 | Tee-Object -FilePath servidor.log -Append"
-pause
+if not defined INICIO pause
