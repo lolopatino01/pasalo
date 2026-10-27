@@ -106,12 +106,18 @@ const STARTUP_FILE = process.platform === 'win32' && process.env.APPDATA && fs.e
   ? path.join(process.env.APPDATA, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'Pasalo.vbs')
   : '';
 
-/** Solo desde el navegador de la misma compu (no por Tailscale ni otro proxy, ni con otro Host). */
+/**
+ * Solo desde el navegador de la misma compu: directo por localhost, o por Tailscale (tailscale serve,
+ * que reenvía desde loopback) cuando el pedido sale de una dirección de esta compu.
+ */
 function canAutostart(req) {
   const remote = (req.socket.remoteAddress || '').replace(/^::ffff:/, '');
-  const host = String(req.headers.host || '');
-  return Boolean(STARTUP_FILE) && (remote === '127.0.0.1' || remote === '::1') && !req.headers['x-forwarded-for'] &&
-    (host === `localhost:${PORT}` || host === `127.0.0.1:${PORT}`);
+  if (!STARTUP_FILE || (remote !== '127.0.0.1' && remote !== '::1')) return false;
+  const fwd = req.headers['x-forwarded-for'];
+  if (!fwd) return [`localhost:${PORT}`, `127.0.0.1:${PORT}`].includes(String(req.headers.host)); // Host fijo: contra DNS rebinding
+  // Direcciones de ahora: Tailscale puede conectarse después de que arrancó el servidor.
+  const mine = Object.values(os.networkInterfaces()).flat().map((a) => a?.address.replace(/^::ffff:/, ''));
+  return mine.includes(String(fwd).trim().replace(/^::ffff:/, ''));
 }
 
 function handleApi(req, res) {

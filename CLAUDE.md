@@ -47,7 +47,8 @@ tests/e2e.mjs      Playwright: dos navegadores, 300 MB con SHA-256, rechazar, ca
   a primer plano y cada 10 min, y se recarga sola si cambió y no hay transferencias, diálogos ni nada pendiente
   (la app instalada en iPhone no se recarga nunca por su cuenta).
 - Inicio con Windows: Ajustes → "Arrancar con Windows" (solo si /config.json trae `autostart`: Windows, pedido desde
-  localhost sin proxy). POST /autostart (JSON) crea o borra `Pasalo.vbs` en la carpeta Inicio del usuario, que corre
+  la misma compu: localhost, o por tailscale serve con X-Forwarded-For de una dirección propia; la app instalada en
+  la compu del dueño abre la dirección de Tailscale). POST /autostart (JSON) crea o borra `Pasalo.vbs` en la carpeta Inicio del usuario, que corre
   `iniciar-pasalo.bat inicio` oculto (sin navegador ni pausa). El .bat, si Pasalo ya anda (127.0.0.1:3000/health),
   solo abre el navegador y sale.
 - Tocar un dispositivo abre "¿qué le pasás?": Archivos / Una carpeta (no en iOS) / Texto o link (no para la nube).
