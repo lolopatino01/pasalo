@@ -14,6 +14,9 @@
   --shadow: 0 1px 0 rgb(24 36 31 / 0.06), 0 8px 24px -12px rgb(24 36 31 / 0.18);
   --font: 'Schibsted Grotesk Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --gutter: 16px;
+  --deco-ring: rgb(47 75 255 / 0.09);
+  --deco-dot: rgb(24 36 31 / 0.11);
+  --deco-glow: rgb(47 75 255 / 0.07);
   color-scheme: light;
 }
 
@@ -32,6 +35,9 @@
     --warn-bg: #3a2c10;
     --warn-ink: #ffd88a;
     --shadow: 0 1px 0 rgb(0 0 0 / 0.3), 0 8px 24px -12px rgb(0 0 0 / 0.6);
+    --deco-ring: rgb(125 144 255 / 0.1);
+    --deco-dot: rgb(231 238 233 / 0.08);
+    --deco-glow: rgb(125 144 255 / 0.08);
     color-scheme: dark;
   }
 }
@@ -50,6 +56,9 @@
     --warn-bg: #3a2c10;
     --warn-ink: #ffd88a;
     --shadow: 0 1px 0 rgb(0 0 0 / 0.3), 0 8px 24px -12px rgb(0 0 0 / 0.6);
+    --deco-ring: rgb(125 144 255 / 0.1);
+    --deco-dot: rgb(231 238 233 / 0.08);
+    --deco-glow: rgb(125 144 255 / 0.08);
     color-scheme: dark;
   }
 
@@ -74,6 +83,31 @@ body {
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+/* Fondo: anillos que salen de una esquina (el mismo dibujo que el anillo de progreso) y una trama de
+   puntos arriba, los dos muy tenues y desvaneciéndose para no competir con el contenido. */
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+body::before {
+  background:
+    repeating-radial-gradient(circle at 100% 100%, transparent 0 63px, var(--deco-ring) 63px 64.5px, transparent 65.5px 72px),
+    radial-gradient(circle at 100% 100%, var(--deco-glow), transparent 60%);
+  -webkit-mask-image: radial-gradient(circle at 100% 100%, #000 15%, transparent 70%);
+  mask-image: radial-gradient(circle at 100% 100%, #000 15%, transparent 70%);
+}
+body::after {
+  background:
+    radial-gradient(circle, var(--deco-dot) 1px, transparent 1.5px) 0 0 / 22px 22px,
+    radial-gradient(ellipse at 15% 0%, var(--deco-glow), transparent 55%);
+  -webkit-mask-image: linear-gradient(to bottom, #000, transparent 45%);
+  mask-image: linear-gradient(to bottom, #000, transparent 45%);
 }
 
 h1,
