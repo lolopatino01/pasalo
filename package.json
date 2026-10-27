@@ -3,6 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "description": "Pasá archivos directo entre tus dispositivos (PWA + WebRTC)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lolopatino01/pasalo.git"
+  },
   "type": "module",
   "engines": {
     "node": ">=22.12"

@@ -1,33 +1,77 @@
+<div align="center">
+
+<img src="public/icons/logo.svg" width="84" alt="">
+
 # Pasalo
 
-Pasá archivos directo entre tus dispositivos (compu, celular, tablet) en cualquier dirección, sin subirlos a ningún lado.
-Es una app web instalable (PWA): anda en Windows, Android, iPhone y tablets desde el navegador, y se puede agregar a la
-pantalla de inicio como una app más.
+**Pasá archivos, carpetas y textos directo entre tus dispositivos.**<br>
+Compu, iPhone, Android y tablet, en cualquier dirección. Sin cables, sin instalar nada y sin pasar por ningún servidor.
 
-Y si querés tener algo a mano en todos tus dispositivos, cada persona puede conectar **su propio Google Drive**.
+<sub>🇬🇧 A free, open-source AirDrop for every device: send files, folders and text peer-to-peer, right from the browser.</sub>
+
+[![Licencia MIT](https://img.shields.io/badge/licencia-MIT-2F4BFF?style=flat-square)](LICENSE)
+[![PWA](https://img.shields.io/badge/PWA-instalable-2F4BFF?style=flat-square)](#instalación)
+[![WebRTC](https://img.shields.io/badge/WebRTC-P2P%20cifrado-12805A?style=flat-square)](#cómo-funciona)
+[![TypeScript](https://img.shields.io/badge/TypeScript-sin%20framework-3178C6?style=flat-square&logo=typescript&logoColor=white)](#desarrollo)
+[![Node.js](https://img.shields.io/badge/Node.js-22.12%2B-339933?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org)
+[![Estrellas](https://img.shields.io/github/stars/lolopatino01/pasalo?style=flat-square&color=2F4BFF)](https://github.com/lolopatino01/pasalo/stargazers)
+
+[Cómo funciona](#cómo-funciona) · [Instalación](#instalación) · [Desde el celular](#usarlo-desde-el-celular-y-la-tablet) · [Tu nube](#tu-nube-google-drive) · [Privacidad](#privacidad-y-seguridad)
+
+<br>
+
+<img src="docs/hero.png" alt="Pasalo en una compu mandándole un video a un iPhone, con el anillo de progreso alrededor de cada dispositivo">
+
+</div>
+
+## ¿Por qué Pasalo?
+
+Pasar una foto de la compu al celular no debería ser mandártela por WhatsApp. AirDrop resuelve eso, pero solo entre
+equipos de Apple. Pasalo es lo mismo para **cualquier dispositivo con navegador**, y los archivos van **directo** de uno
+al otro.
+
+| | **Pasalo** | AirDrop | WhatsApp | Subirlo a la nube |
+|---|:---:|:---:|:---:|:---:|
+| iPhone ↔ Android ↔ Windows | ✅ | ❌ solo Apple | ✅ | ✅ |
+| Archivos de varios GB | ✅ | ✅ | ❌ hasta 2 GB | ⚠️ ocupa tu espacio |
+| Fotos y videos en calidad original | ✅ | ✅ | ⚠️ los comprime | ✅ |
+| Sin pasar por servidores de terceros | ✅ | ✅ | ❌ | ❌ |
+| Carpetas enteras | ✅ | ✅ | ❌ | ✅ |
+| Sin instalar ninguna app | ✅ | ✅ | ❌ | ⚠️ |
+
+## En acción
+
+<div align="center">
+<img src="docs/demo.gif" width="880" alt="La compu le pasa un video al celular, el celular acepta, el anillo se llena y el celular contesta con un texto">
+</div>
 
 ## Qué hace
 
-- **Encuentra solos** los dispositivos que están en tu misma wifi. Tocás uno, elegís qué pasarle y listo.
+- **Encuentra solos** los dispositivos de tu misma wifi. Tocás uno, elegís qué pasarle y listo.
 - **Cualquier dispositivo con cualquier otro**, sea de quien sea: los de otras redes se vinculan una vez con un código de 6 números.
-- **Archivos de cualquier tamaño**: de una foto a un zip de varios GB. El que recibe tiene que aceptar.
-- **Carpetas enteras**, sin comprimirlas antes: llegan como un zip que se arma mientras se manda, con las subcarpetas.
+- **Archivos de cualquier tamaño**, de una foto a un video de varios GB. El que recibe tiene que aceptar.
+- **Carpetas enteras** sin comprimirlas antes: llegan como un zip que se arma mientras se manda, con sus subcarpetas.
 - **Texto y links**: escribís o pegás algo y al otro le aparece para copiarlo o abrir el link.
-- **Guarda a disco mientras llega** (en Chrome, Edge, Android y Safari de iOS 26 o más nuevo), así no llena la memoria.
+- **Guarda a disco mientras llega** (Chrome, Edge, Android y Safari de iOS 26+), así no llena la memoria.
 - **Progreso en vivo**: un anillo alrededor de cada dispositivo, con velocidad, tiempo restante y cancelar.
-- **Recibidos**: quedan en la app hasta que los borres, con Descargar, Abrir y Compartir (en el celular, para guardarlos en Fotos o Archivos).
-- **Tu nube** (opcional): sube a una carpeta "Pasalo" de tu Google Drive y la ves desde todos tus dispositivos.
-  Desde ahí lo bajás a cualquiera de los tuyos o se lo pasás a otro dispositivo.
-- **Compartir → Pasalo** en Android, con la app instalada.
-- Tema claro, oscuro o automático. Mantiene la pantalla encendida mientras transfiere.
+- **Recibidos** quedan en la app hasta que los borres: Descargar, Abrir y Compartir (en el celular, a Fotos o Archivos).
+- **Tu nube** (opcional): cada persona conecta su propio Google Drive para tener cosas a mano en todos sus dispositivos,
+  bajarlas o pasárselas a otro.
+- **Se instala** como una app más, aparece en **Compartir** de Android, anda en **modo oscuro** y se actualiza sola.
+
+<div align="center">
+<img src="docs/celular.png" alt="Tres pantallas del celular: elegir qué pasar, aceptar lo que llega y un texto recibido">
+<br><br>
+<img src="docs/oscuro.png" alt="Pasalo en modo oscuro mandando un video a una tablet">
+</div>
 
 ## Cómo funciona
 
-```
-   celular ◄──────── archivo, directo y cifrado (WebRTC) ────────► compu
-      │                                                              │
-      └──────────►  servidor de Pasalo (corre en tu compu)  ◄────────┘
-                    solo presenta a los dispositivos entre sí
+```mermaid
+flowchart LR
+    A["📱 Celular"] <== "archivo directo y cifrado (WebRTC)" ==> B["💻 Compu"]
+    A -. "solo para encontrarse" .-> S[("Servidor de Pasalo<br>en tu compu")]
+    B -.-> S
 ```
 
 1. Una compu de la casa corre el **servidor de Pasalo** (Node.js). Sirve la app y presenta a los dispositivos entre sí.
@@ -43,12 +87,11 @@ Y si querés tener algo a mano en todos tus dispositivos, cada persona puede con
 
 - **Los archivos no se guardan en ningún servidor.** Van de un dispositivo al otro, y lo recibido queda solo en el dispositivo que lo recibió.
 - **Quién te ve:** solo los dispositivos que llegan a tu servidor (tu wifi o tu red de Tailscale) y los que vinculaste con
-  un código. Nadie puede mandarte nada sin que lo aceptes.
+  un código. Nadie puede mandarte un archivo sin que lo aceptes.
 - **Google Drive:** Pasalo pide el permiso `drive.file`, que solo deja ver y tocar **los archivos que subió Pasalo**,
   nunca el resto de tu Drive. El permiso queda guardado solo en tu navegador, dura una hora y lo podés sacar en cualquier
   momento desde Ajustes o desde [tu cuenta de Google](https://myaccount.google.com/permissions).
-- **Este repositorio no tiene datos personales ni claves.** Tu ID de Google va en un archivo `.env` que no se sube
-  (está en `.gitignore`), y las direcciones de tu red no aparecen en el código.
+- **Sin datos personales ni claves en el código.** Tu ID de Google va en un archivo `.env` que no se sube.
 - **No lo publiques abierto a internet** (por ejemplo, con un túnel público): cualquiera con la dirección vería los
   nombres de tus dispositivos y podría mandarte pedidos. Para usarlo fuera de casa, usá Tailscale (abajo).
 
@@ -243,3 +286,21 @@ src/identity.ts     nombre e identidad del dispositivo, vinculados
 src/share.ts        archivos que llegan desde "Compartir" (Android)
 public/sw.js        service worker (offline y Compartir)
 ```
+
+## Lo que sigue
+
+- [ ] Que arranque solo con Windows, sin dejar una ventana abierta.
+- [ ] Servidor TURN propio para redes que bloquean la conexión directa.
+- [ ] Renovar solo el permiso de Drive para bajar archivos enormes de la nube.
+- [ ] Interfaz en inglés.
+
+## Contribuir
+
+¿Encontraste un error o tenés una idea? Abrí un [issue](https://github.com/lolopatino01/pasalo/issues) o mandá un pull
+request. Antes de mandar cambios, corré `npm run check`, `npm run build` y las pruebas (ver [Desarrollo](#desarrollo)).
+
+Si Pasalo te sirve, **dejale una ⭐**: ayuda a que lo encuentre más gente.
+
+## Licencia
+
+[MIT](LICENSE): usalo, modificalo y compartilo libremente.
