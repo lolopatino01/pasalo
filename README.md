@@ -287,13 +287,6 @@ src/share.ts        archivos que llegan desde "Compartir" (Android)
 public/sw.js        service worker (offline y Compartir)
 ```
 
-## Lo que sigue
-
-- [ ] Que arranque solo con Windows, sin dejar una ventana abierta.
-- [ ] Servidor TURN propio para redes que bloquean la conexión directa.
-- [ ] Renovar solo el permiso de Drive para bajar archivos enormes de la nube.
-- [ ] Interfaz en inglés.
-
 ## Contribuir
 
 ¿Encontraste un error o tenés una idea? Abrí un [issue](https://github.com/lolopatino01/pasalo/issues) o mandá un pull
