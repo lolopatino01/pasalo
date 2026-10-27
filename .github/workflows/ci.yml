@@ -1,0 +1,39 @@
+# Compila y corre las pruebas de punta a punta en cada cambio: conexión directa y por el servidor.
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        relay: ['0', '1']
+    name: e2e (${{ matrix.relay == '1' && 'por el servidor' || 'directa' }})
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm run build
+      - name: Playwright
+        run: npm i --no-save playwright@1.64.1 && npx playwright install --with-deps chromium
+      - name: Pruebas
+        env:
+          RELAY: ${{ matrix.relay }}
+          SIZE_MB: '100'
+        run: |
+          PORT=3100 GOOGLE_CLIENT_ID= npm start > servidor.log 2>&1 &
+          for i in $(seq 30); do curl -sf http://localhost:3100/health && break; sleep 1; done
+          npm run test:e2e
+      - name: Registro del servidor
+        if: failure()
+        run: cat servidor.log
