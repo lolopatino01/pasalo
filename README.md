@@ -167,7 +167,7 @@ y el otro lo escribe. Se hace una sola vez.
 
 Opcional. Cada persona conecta **su propio** Google Drive y usa **su propio** espacio: el círculo "Tu nube" sube a una
 carpeta "Pasalo" y el panel "Tu nube" lista lo subido en todos sus dispositivos. Las subidas van por partes y se
-retoman si se corta internet. En cada archivo:
+retoman si se corta internet. Tocando el círculo también está **Bajar de tu nube**, que te lleva a la lista. En cada archivo:
 
 - **Bajar**: lo trae a Recibidos de ese dispositivo (a disco, como lo que te pasan).
 - **Pasar a…**: tocás otro dispositivo, aunque sea de otra persona, y se lo manda bajándolo de a pedazos, sin guardarlo en el tuyo.
@@ -247,11 +247,12 @@ El servidor anota lo que pasa en la ventana negra (y en `servidor.log` si usás 
 
 | Parte | Tecnología |
 |---|---|
-| App | TypeScript + Vite, sin framework (≈25 KB comprimida) |
+| App | TypeScript + Vite, sin framework (≈30 KB comprimida) |
 | Servidor | Node.js + `ws` |
 | Transferencia | WebRTC DataChannel, con puente por WebSocket de respaldo |
 | Guardado | OPFS (Origin Private File System), escribe a disco mientras llega |
 | Nube | Google Identity Services + Drive API v3 (subida reanudable) |
+| Idioma | Español e inglés, sin librerías: diccionario en `src/i18n.ts` |
 
 El emisor no se adelanta más de 16 MB a lo que el receptor confirmó como escrito, así un celular lento no se queda sin memoria.
 
@@ -262,8 +263,8 @@ npm run build      # compila a dist/
 ```
 
 **Pruebas.** `tests/e2e.mjs` abre dos navegadores con Playwright y prueba un archivo de 300 MB (verificado con SHA-256),
-rechazar, cancelar, recargar, vincular con código, quitar dispositivos, el tema, texto y links, carpetas y "Tu nube"
-(con Google Drive simulado: subir, bajar y pasar a otro dispositivo):
+rechazar, cancelar, recargar, vincular con código, quitar dispositivos, el tema, texto y links, carpetas, el inglés y
+el cambio de idioma, y "Tu nube" (con Google Drive simulado: subir, bajar y pasar a otro dispositivo):
 
 ```bash
 npm i --no-save playwright && npx playwright install chromium
@@ -293,6 +294,7 @@ public/sw.js        service worker (offline y Compartir)
 
 ¿Encontraste un error o tenés una idea? Abrí un [issue](https://github.com/lolopatino01/pasalo/issues) o mandá un pull
 request. Antes de mandar cambios, corré `npm run check`, `npm run build` y las pruebas (ver [Desarrollo](#desarrollo)).
+Los textos de la interfaz se escriben en español; si agregás uno, sumá su traducción al inglés en `src/i18n.ts`.
 
 Si Pasalo te sirve, **dejale una ⭐**: ayuda a que lo encuentre más gente.
 
