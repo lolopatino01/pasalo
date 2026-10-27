@@ -128,7 +128,7 @@
         <h2 id="text-title"></h2>
         <button class="icon-btn close" type="button" data-close aria-label="Cerrar">×</button>
       </div>
-      <p id="text-body" class="text-body"></p>
+      <p id="text-body" class="text-body" translate="no"></p>
       <div class="actions">
         <a id="text-open" class="btn" target="_blank" rel="noopener" hidden>Abrir link</a>
         <button id="text-copy" class="btn btn-primary" type="button">Copiar</button>
@@ -182,6 +182,14 @@
           <button type="button" role="radio" data-theme-choice="system">Automático</button>
           <button type="button" role="radio" data-theme-choice="light">Claro</button>
           <button type="button" role="radio" data-theme-choice="dark">Oscuro</button>
+        </div>
+      </div>
+      <div class="field">
+        <h3>Idioma</h3>
+        <div class="segmented" role="radiogroup" aria-label="Idioma">
+          <button type="button" role="radio" data-lang-choice="auto">Automático</button>
+          <button type="button" role="radio" data-lang-choice="es" translate="no">Español</button>
+          <button type="button" role="radio" data-lang-choice="en" translate="no">English</button>
         </div>
       </div>
       <div class="field" id="hidden-field" hidden>

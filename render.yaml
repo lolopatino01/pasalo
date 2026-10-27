@@ -1,0 +1,20 @@
+# Demo pública en Render (plan gratis). Se crea con el botón "Deploy to Render" del README.
+# DEMO=1 muestra el aviso de demo; RELAY_LIMIT_MB pone tope a lo que pasa por el servidor
+# cuando la conexión directa no se puede armar. Sin GOOGLE_CLIENT_ID, "Tu nube" no aparece.
+services:
+  - type: web
+    name: pasalo
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DEMO
+        value: "1"
+      - key: TRUST_PROXY
+        value: "1"
+      - key: RELAY_LIMIT_MB
+        value: "200"

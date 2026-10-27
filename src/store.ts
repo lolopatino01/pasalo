@@ -3,6 +3,8 @@
 //   a medida que llegan: sirve para archivos de varios GB sin llenar la memoria.
 // - Si no (iPhone viejo, modo privado), se arman en memoria.
 
+import { t } from './i18n';
+
 export interface Received {
   id: string;
   name: string;
@@ -178,7 +180,7 @@ export async function createSink(
 /** Guarda un texto recibido como cualquier otro recibido (queda después de recargar). */
 export async function saveText(id: string, text: string, from: string): Promise<Received> {
   const data = new TextEncoder().encode(text);
-  const sink = await createSink(id, { name: `Texto de ${from}.txt`, size: data.byteLength, type: 'text/plain', from, text }, () => {});
+  const sink = await createSink(id, { name: t('Texto de {from}.txt', { from }), size: data.byteLength, type: 'text/plain', from, text }, () => {});
   sink.write(data.buffer);
   return sink.finish();
 }

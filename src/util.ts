@@ -1,3 +1,5 @@
+import { LOCALE, t } from './i18n';
+
 export type DeviceKind = 'phone' | 'tablet' | 'desktop';
 
 export function randomHex(bytes = 16): string {
@@ -6,8 +8,8 @@ export function randomHex(bytes = 16): string {
   return Array.from(a, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-const nf1 = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 1 });
-const nf0 = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 });
+const nf1 = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 1 });
+const nf0 = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 0 });
 
 export function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
@@ -47,8 +49,8 @@ export function defaultName(kind: DeviceKind): string {
     : /Windows/.test(ua) ? 'Windows'
     : /Mac/.test(ua) ? 'Mac'
     : /Linux/.test(ua) ? 'Linux' : '';
-  const base = kind === 'phone' ? 'Celular' : kind === 'tablet' ? 'Tablet' : 'Compu';
-  return os && os !== 'iPhone' && os !== 'iPad' ? `${base} ${os}` : os || base;
+  const base = t(kind === 'phone' ? 'Celular' : kind === 'tablet' ? 'Tablet' : 'Compu');
+  return os && os !== 'iPhone' && os !== 'iPad' ? t('{base} {os}', { base, os }) : os || base;
 }
 
 export function el<K extends keyof HTMLElementTagNameMap>(

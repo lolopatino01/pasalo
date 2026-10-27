@@ -61,8 +61,8 @@ const RELAY = process.env.RELAY === '1';
 const browser = await chromium.launch({
   args: ['--disable-features=WebRtcHideLocalIpsWithMdns', ...(RELAY ? ['--force-webrtc-ip-handling-policy=disable_non_proxied_udp'] : [])],
 });
-const pc = await browser.newContext({ viewport: { width: 1280, height: 820 }, acceptDownloads: true });
-const phone = await browser.newContext({
+const pc = await browser.newContext({ locale: 'es-AR', viewport: { width: 1280, height: 820 }, acceptDownloads: true });
+const phone = await browser.newContext({ locale: 'es-AR',
   acceptDownloads: true,
   viewport: { width: 390, height: 844 },
   deviceScaleFactor: 2,
@@ -153,7 +153,7 @@ const opfs = await B.evaluate(async () => {
 ok(opfs === 2, 'y limpia lo escrito en disco');
 
 // ---- 6. Vincular con código (tercer dispositivo)
-const tablet = await browser.newContext({ viewport: { width: 820, height: 1180 }, userAgent: 'Mozilla/5.0 (Linux; Android 14; SM-X710) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36' });
+const tablet = await browser.newContext({ locale: 'es-AR', viewport: { width: 820, height: 1180 }, userAgent: 'Mozilla/5.0 (Linux; Android 14; SM-X710) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36' });
 const C = await tablet.newPage();
 await C.goto(BASE);
 await A.click('#pair-btn');
@@ -247,6 +247,21 @@ const entries = unzip(Buffer.from(zipB64, 'base64'));
 ok(entries.size === 3 && entries.get('fotos/playa.png')?.equals(fs.readFileSync(photo)), 'el zip trae las subcarpetas y los archivos idénticos');
 ok(entries.get('notas ñ.txt')?.toString() === 'llevar protector\n' && entries.get('vacío.txt')?.length === 0, 'con tildes y archivos vacíos');
 
+// ---- 11b. En inglés (navegador en inglés) y cambiar el idioma desde Ajustes
+const english = await browser.newContext({ locale: 'en-US', viewport: { width: 390, height: 844 }, userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36' });
+const E = await english.newPage();
+await E.goto(BASE);
+await E.waitForSelector('#devices .device:not(.offline)');
+ok((await E.textContent('h1')) === 'Where do you want to send it?' && (await E.textContent('#me-name')).includes('Android Phone'), 'con el navegador en inglés, la interfaz y el nombre salen en inglés');
+await E.click(toA);
+ok((await E.textContent('#send-title')).startsWith('Send to ') && (await E.textContent('#send-files')).includes('Photos, videos, documents'), 'los textos que aparecen después también');
+await E.keyboard.press('Escape');
+await E.click('#settings-btn');
+await Promise.all([E.waitForNavigation(), E.click('[data-lang-choice="es"]')]);
+await E.waitForSelector('#devices .device:not(.offline)');
+ok((await E.textContent('h1')) === '¿A dónde lo pasás?', 'en Ajustes se puede elegir español y queda guardado');
+await english.close();
+
 // ---- 12. Tu nube (Google Drive simulado: el script de Google y la API se responden acá)
 const mid = path.join(tmp, 'presentación.pdf');
 fs.writeFileSync(mid, crypto.randomBytes(20 << 20)); // 3 trozos de 8 MB
@@ -258,7 +273,7 @@ const cors = {
 };
 const json = (route, body, status = 200, headers = {}) =>
   route.fulfill({ status, headers: { ...cors, 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
-const cloud = await browser.newContext({ viewport: { width: 1280, height: 820 } });
+const cloud = await browser.newContext({ locale: 'es-AR', viewport: { width: 1280, height: 820 } });
 await cloud.route('**/config.json', async (route) => {
   const res = await route.fetch();
   json(route, { ...(await res.json()), googleClientId: 'prueba.apps.googleusercontent.com' });

@@ -5,6 +5,7 @@
 import { isFinal, type Transfer } from './transfer';
 import { createSink, type Received, type Sink } from './store';
 import { randomHex } from './util';
+import { t as tx } from './i18n';
 import type { Source } from './zip';
 
 export const CLOUD_ID = 'nube';
@@ -150,7 +151,7 @@ export class Drive extends EventTarget {
   upload(files: Source[]) {
     for (const file of files) {
       const t: Transfer = {
-        id: randomHex(8), peerId: CLOUD_ID, peerName: 'tu nube', direction: 'out',
+        id: randomHex(8), peerId: CLOUD_ID, peerName: tx('tu nube'), direction: 'out',
         files: [{ name: file.name, size: file.size, type: file.type }],
         total: file.size, bytes: 0, index: 0, status: 'waiting', speed: 0, startedAt: Date.now(),
       };
@@ -254,7 +255,7 @@ export class Drive extends EventTarget {
   /** Baja un archivo de la nube a los recibidos de este dispositivo (a disco si se puede, como lo que llega de otro). */
   download(f: CloudFile) {
     const t: Transfer = {
-      id: randomHex(8), peerId: CLOUD_ID, peerName: 'tu nube', direction: 'in',
+      id: randomHex(8), peerId: CLOUD_ID, peerName: tx('tu nube'), direction: 'in',
       files: [{ name: f.name, size: f.size, type: f.mimeType }],
       total: f.size, bytes: 0, index: 0, status: 'active', speed: 0, startedAt: Date.now(),
     };
@@ -402,6 +403,6 @@ async function driveError(res: Response): Promise<string> {
     reason = (await res.json()).error?.errors?.[0]?.reason ?? '';
   } catch { /* sin detalle */ }
   if (reason === 'storageQuotaExceeded') return 'Tu Drive está lleno. Liberá espacio en drive.google.com y probá de nuevo.';
-  if (res.status === 403) return `Drive no dejó hacerlo (${reason || 'sin permiso'}). Probá desconectar y conectar Drive de nuevo en Ajustes.`;
-  return `Drive respondió con un error (${res.status}${reason ? `, ${reason}` : ''}). Probá de nuevo en un rato.`;
+  if (res.status === 403) return tx('Drive no dejó hacerlo ({reason}). Probá desconectar y conectar Drive de nuevo en Ajustes.', { reason: reason || tx('sin permiso') });
+  return tx('Drive respondió con un error ({code}). Probá de nuevo en un rato.', { code: reason ? `${res.status}, ${reason}` : res.status });
 }

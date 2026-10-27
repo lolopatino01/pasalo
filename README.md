@@ -7,7 +7,7 @@
 **Pasá archivos, carpetas y textos directo entre tus dispositivos.**<br>
 Compu, iPhone, Android y tablet, en cualquier dirección. Sin cables, sin instalar nada y sin pasar por ningún servidor.
 
-<sub><b>English:</b> a free, open-source AirDrop for every device: send files, folders and text peer-to-peer, right from the browser.</sub>
+<sub><b>English:</b> a free, open-source AirDrop for every device: send files, folders and text peer-to-peer, right from the browser. The app speaks English and Spanish.</sub>
 
 [![Licencia MIT](https://img.shields.io/badge/licencia-MIT-2F4BFF?style=flat-square)](LICENSE)
 [![PWA](https://img.shields.io/badge/PWA-instalable-2F4BFF?style=flat-square)](#instalación)
@@ -17,6 +17,8 @@ Compu, iPhone, Android y tablet, en cualquier dirección. Sin cables, sin instal
 [![Estrellas](https://img.shields.io/github/stars/lolopatino01/pasalo?style=flat-square&color=2F4BFF)](https://github.com/lolopatino01/pasalo/stargazers)
 
 [Cómo funciona](#cómo-funciona) · [Instalación](#instalación) · [Desde el celular](#usarlo-desde-el-celular-y-la-tablet) · [Tu nube](#tu-nube-google-drive) · [Privacidad](#privacidad-y-seguridad)
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/lolopatino01/pasalo)
 
 <br>
 
@@ -58,6 +60,7 @@ al otro.
 - **Tu nube** (opcional): cada persona conecta su propio Google Drive para tener cosas a mano en todos sus dispositivos,
   bajarlas o pasárselas a otro.
 - **Se instala** como una app más, aparece en **Compartir** de Android, anda en **modo oscuro** y se actualiza sola.
+- **En español o inglés**, según el idioma del navegador (se cambia en Ajustes).
 
 <div align="center">
 <img src="docs/celular.png" alt="Tres pantallas del celular: elegir qué pasar, aceptar lo que llega y un texto recibido">
@@ -210,6 +213,8 @@ Variables de entorno, o un archivo `.env` en la carpeta del proyecto (una por l�
 | `STUN_URLS` | Google y Cloudflare | Servidores STUN, separados por coma |
 | `TURN_URL`, `TURN_USERNAME`, `TURN_CREDENTIAL` | vacío | Servidor TURN opcional, para redes que bloquean la conexión directa |
 | `SSL_CERT`, `SSL_KEY` | vacío | Rutas a un certificado para servir `https` directo |
+| `DEMO` | apagado | `1` para una demo pública: la app avisa que la ve cualquiera de la misma red |
+| `RELAY_LIMIT_MB` | sin tope | Máximo de MB que cada dispositivo puede pasar por el servidor cuando la conexión directa no se arma |
 
 ### En un servidor (Raspberry Pi, VPS)
 
@@ -220,6 +225,13 @@ docker run -d --restart unless-stopped -p 3000:3000 -e GOOGLE_CLIENT_ID=... pasa
 
 Si queda detrás de un proxy en otra máquina, agregá `-e TRUST_PROXY=1` para que el servidor vea la IP real de cada
 dispositivo y agrupe bien "tu red".
+
+### Una demo pública en Render (gratis)
+
+El botón **Deploy to Render** de arriba crea una copia en tu cuenta de [Render](https://render.com) con
+[`render.yaml`](render.yaml): plan gratis, `https` incluido y modo demo (aviso para los visitantes y un tope a lo que pasa
+por el servidor). Sirve para que alguien pruebe Pasalo entre dos pestañas o dos dispositivos sin instalar nada. En el plan
+gratis el servidor se duerme si nadie lo usa, así que la primera visita tarda alrededor de un minuto en abrir.
 
 ## Si algo no anda
 
@@ -282,6 +294,7 @@ src/signaling.ts    cliente del WebSocket con reconexión
 src/store.ts        guardado de lo recibido (disco o memoria)
 src/drive.ts        Tu nube: Google Drive (permiso, subida reanudable, bajar, pasar, papelera)
 src/zip.ts          carpetas: zip armado al vuelo (sin comprimir, ZIP64 si pasa los 4 GB)
+src/i18n.ts         idioma: español o inglés (diccionario + traducción de lo que aparece en pantalla)
 src/identity.ts     nombre e identidad del dispositivo, vinculados
 src/share.ts        archivos que llegan desde "Compartir" (Android)
 public/sw.js        service worker (offline y Compartir)

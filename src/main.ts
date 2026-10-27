@@ -10,6 +10,7 @@ import { takeSharedFiles } from './share';
 import { CLOUD_ID, Drive, type CloudFile } from './drive';
 import { readDropped, zipsFromPicked, type Source } from './zip';
 import { ICONS, canPreview, el, fileIcon, formatBytes, formatDuration, randomHex, svg, type DeviceKind } from './util';
+import { LOCALE, langChoice, setLangChoice, t as tx, translatePage, type LangChoice } from './i18n';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -34,6 +35,10 @@ fetch('/config.json')
   .then((c) => {
     if (Array.isArray(c.iceServers)) iceServers = c.iceServers;
     if (typeof c.googleClientId === 'string') drive.init(c.googleClientId);
+    if (c.demo) {
+      $('banner').textContent = 'Esto es una demo pública: te ven los que están en tu misma red. Para usarlo en casa, instalalo en tu compu.';
+      $('banner').hidden = false;
+    }
   })
   .catch(() => {});
 
@@ -41,7 +46,7 @@ fetch('/config.json')
 const allTransfers = () => [...manager.transfers.values(), ...drive.uploads.values()];
 
 function nameOf(id: string): string {
-  return peers.find((p) => p.id === id)?.name ?? me.pairs.find((p) => p.peerId === id)?.name ?? 'Otro dispositivo';
+  return peers.find((p) => p.id === id)?.name ?? me.pairs.find((p) => p.peerId === id)?.name ?? tx('Otro dispositivo');
 }
 
 // ------------------------------------------------------------------ señalización
@@ -81,7 +86,7 @@ signaling.addEventListener('message', (e) => {
       saveIdentity(me);
       closePairCode();
       $<HTMLDialogElement>('pair-dlg').close();
-      toast(`Listo, quedó vinculado con ${msg.peer.name}.`);
+      toast(tx('Listo, quedó vinculado con {name}.', { name: msg.peer.name }));
       renderDevices();
       renderSettings();
       break;
@@ -119,7 +124,7 @@ manager.addEventListener('remote-cancel', (e) => {
     currentRequest = null;
     $<HTMLDialogElement>('request-dlg').close('cancelled');
   }
-  toast(`${t.peerName} canceló la transferencia.`);
+  toast(tx('{name} canceló la transferencia.', { name: t.peerName }));
   updateTitle();
 });
 
@@ -130,7 +135,7 @@ function onReceived(e: Event) {
 manager.addEventListener('received', onReceived);
 drive.addEventListener('received', (e) => {
   onReceived(e);
-  toast(`Listo, "${(e as CustomEvent<Received>).detail.name}" está en Recibidos.`);
+  toast(tx('Listo, "{name}" está en Recibidos.', { name: (e as CustomEvent<Received>).detail.name }));
 });
 
 manager.addEventListener('text', async (e) => {
@@ -138,7 +143,7 @@ manager.addEventListener('text', async (e) => {
   const r = await saveText(randomHex(8), text, peerName);
   received.unshift(r);
   renderReceived();
-  showText(r, `${peerName} te pasó un texto`);
+  showText(r, tx('{name} te pasó un texto', { name: peerName }));
 });
 
 function sendTo(peerId: string, files: Source[]) {
@@ -215,13 +220,13 @@ function renderDevices() {
         class: 'device-btn',
         type: 'button',
         disabled: !d.online,
-        'aria-label': d.online ? `Pasar archivos a ${d.name}` : `${d.name}, no conectado`,
+        'aria-label': tx(d.online ? 'Pasar archivos a {name}' : '{name}, no conectado', { name: d.name }),
         onclick: () => onDeviceClick(d.id),
-      }, orb(ICONS[d.kind]), el('span', { class: 'device-name' }, d.name), meta);
+      }, orb(ICONS[d.kind]), el('span', { class: 'device-name', translate: 'no' }, d.name), meta);
       const more = el('button', {
         class: 'device-more icon-btn',
         type: 'button',
-        'aria-label': `Opciones de ${d.name}`,
+        'aria-label': tx('Opciones de {name}', { name: d.name }),
         onclick: () => openDeviceSheet(d),
       }, svg(ICONS.more));
       const li = el('li', { class: `device${d.online ? '' : ' offline'}`, dataset: { id: d.id } }, btn, more);
@@ -258,7 +263,7 @@ $('device-remove').addEventListener('click', () => {
   if (live?.via.includes('red') && !me.hidden.some((h) => h.id === d.id)) me.hidden.push({ id: d.id, name: d.name, kind: d.kind });
   saveIdentity(me);
   $<HTMLDialogElement>('device-dlg').close();
-  toast(`Quitaste ${d.name}.`);
+  toast(tx('Quitaste {name}.', { name: d.name }));
   renderDevices();
   renderSettings();
 });
@@ -269,8 +274,8 @@ function updateHint() {
   if (pendingShare.length) {
     hint.replaceChildren(
       pendingFromCloud
-        ? `Tocá a qué dispositivo pasarle "${pendingShare[0].name}" desde tu nube. `
-        : `Tenés ${pendingShare.length === 1 ? 'un archivo' : `${pendingShare.length} archivos`} para pasar. Tocá a qué dispositivo. `,
+        ? tx('Tocá a qué dispositivo pasarle "{name}" desde tu nube.', { name: pendingShare[0].name }) + ' '
+        : tx(pendingShare.length === 1 ? 'Tenés un archivo para pasar. Tocá a qué dispositivo.' : 'Tenés {n} archivos para pasar. Tocá a qué dispositivo.', { n: pendingShare.length }) + ' ',
       el('button', { class: 'link-btn', type: 'button', onclick: () => setPending([]) }, 'Cancelar'),
     );
     hint.classList.add('hint-strong');
@@ -295,7 +300,7 @@ async function connectCloud() {
     return;
   }
   if (pendingShare.length) return onDeviceClick(CLOUD_ID);
-  toast(first ? `Listo, tu Drive (${drive.email}) quedó conectado. Tocá "Tu nube" para elegir qué subir.` : 'Listo. Tocá "Tu nube" de nuevo para elegir qué subir.');
+  toast(first ? tx('Listo, tu Drive ({email}) quedó conectado. Tocá "Tu nube" para elegir qué subir.', { email: drive.email }) : 'Listo. Tocá "Tu nube" de nuevo para elegir qué subir.');
 }
 
 function onDeviceClick(id: string) {
@@ -322,7 +327,7 @@ for (const b of document.querySelectorAll<HTMLElement>('.choice')) b.prepend(svg
 
 function openSendSheet(id: string) {
   sendTarget = id;
-  $('send-title').textContent = id === CLOUD_ID ? 'Subir a tu nube' : `Pasar a ${nameOf(id)}`;
+  $('send-title').textContent = id === CLOUD_ID ? 'Subir a tu nube' : tx('Pasar a {name}', { name: nameOf(id) });
   $('send-choices').hidden = false;
   $('text-form').hidden = true;
   $('send-folder').hidden = !canPickFolder;
@@ -372,7 +377,7 @@ function sendTextTo(peerId: string, text: string) {
   if (text.length > MAX_TEXT) return toast('Ese texto es muy largo para pasarlo así. Guardalo en un archivo y pasá el archivo.');
   const name = nameOf(peerId);
   manager.sendText(peerId, text).then(
-    () => toast(`Le pasaste el texto a ${name}.`),
+    () => toast(tx('Le pasaste el texto a {name}.', { name })),
     (err) => toast((err as Error).message),
   );
 }
@@ -453,7 +458,7 @@ function updateDeviceRings() {
     const t = active[0];
     meta.textContent = waiting
       ? id === CLOUD_ID ? 'Preparando…' : t.status === 'connecting' ? 'Conectando…' : t.status === 'pending' ? 'Te quiere pasar algo' : 'Esperando que acepte'
-      : `${id === CLOUD_ID ? (t.direction === 'in' ? 'Bajando' : 'Subiendo') : t.direction === 'out' ? 'Enviando' : 'Recibiendo'} ${Math.floor(ratio * 100)}%`;
+      : tx(`${id === CLOUD_ID ? (t.direction === 'in' ? 'Bajando' : 'Subiendo') : t.direction === 'out' ? 'Enviando' : 'Recibiendo'} {p}%`, { p: Math.floor(ratio * 100) });
   }
 }
 
@@ -463,25 +468,25 @@ const transferRows = new Map<string, HTMLLIElement>();
 
 function summary(t: Transfer): string {
   const first = t.files[0]?.name ?? '';
-  return t.files.length === 1 ? first : `${first} y ${t.files.length - 1} más`;
+  return t.files.length === 1 ? first : tx('{first} y {n} más', { first, n: t.files.length - 1 });
 }
 
 function statusLine(t: Transfer): string {
   switch (t.status) {
     case 'connecting': return 'Conectando con el otro dispositivo…';
-    case 'waiting': return t.peerId === CLOUD_ID ? 'En la fila para subir' : `Esperando que ${t.peerName} acepte…`;
+    case 'waiting': return t.peerId === CLOUD_ID ? 'En la fila para subir' : tx('Esperando que {name} acepte…', { name: t.peerName });
     case 'pending': return 'Esperando tu respuesta';
     case 'active': {
       const left = t.speed > 0 ? formatDuration((t.total - t.bytes) / t.speed) : '';
-      return `${formatBytes(t.bytes)} de ${formatBytes(t.total)}` +
-        (t.speed > 0 ? `, ${formatBytes(t.speed)}/s` : '') + (left ? `, faltan ${left}` : '') +
-        (t.route === 'servidor' ? ' (por el servidor)' : '');
+      return tx('{done} de {total}', { done: formatBytes(t.bytes), total: formatBytes(t.total) }) +
+        (t.speed > 0 ? `, ${formatBytes(t.speed)}/s` : '') + (left ? tx(', faltan {left}', { left }) : '') +
+        (t.route === 'servidor' ? tx(' (por el servidor)') : '');
     }
     case 'done': {
       const secs = ((t.endedAt ?? Date.now()) - t.startedAt) / 1000;
-      return `${t.peerId === CLOUD_ID ? (t.direction === 'in' ? 'Bajado' : 'Subido') : t.direction === 'out' ? 'Enviado' : 'Recibido'}: ${formatBytes(t.total)} en ${formatDuration(secs)}`;
+      return tx(`${t.peerId === CLOUD_ID ? (t.direction === 'in' ? 'Bajado' : 'Subido') : t.direction === 'out' ? 'Enviado' : 'Recibido'}: {size} en {time}`, { size: formatBytes(t.total), time: formatDuration(secs) });
     }
-    case 'declined': return t.direction === 'out' ? `${t.peerName} lo rechazó` : 'Lo rechazaste';
+    case 'declined': return t.direction === 'out' ? tx('{name} lo rechazó', { name: t.peerName }) : 'Lo rechazaste';
     case 'cancelled': return 'Cancelado';
     case 'error': return t.error || 'Algo salió mal';
   }
@@ -495,7 +500,7 @@ function renderTransfer(t: Transfer) {
     $('transfers').prepend(li);
   }
   const ratio = t.total ? t.bytes / t.total : t.status === 'done' ? 1 : 0;
-  const dir = t.direction === 'out' ? `Para ${t.peerName}` : `De ${t.peerName}`;
+  const dir = tx(t.direction === 'out' ? 'Para {name}' : 'De {name}', { name: t.peerName });
   li.className = `row transfer s-${t.status}`;
   // El mismo botón en cada actualización: si se recrea con cada avance, un toque que empieza
   // sobre uno y termina sobre otro no cuenta como clic.
@@ -505,7 +510,7 @@ function renderTransfer(t: Transfer) {
     }, 'Cancelar');
   li.replaceChildren(
     el('div', { class: 'row-main' },
-      el('p', { class: 'row-title' }, summary(t)),
+      el('p', { class: 'row-title', translate: 'no' }, summary(t)),
       el('p', { class: 'row-sub' }, dir),
       el('div', { class: 'bar', role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(Math.round(ratio * 100)) },
         el('span', { style: `transform: scaleX(${ratio})` })),
@@ -544,13 +549,13 @@ async function showNextRequest() {
   if (t.status !== 'pending') return showNextRequest();
   currentRequest = t;
   const n = t.files.length;
-  $('request-title').textContent = `${t.peerName} te quiere pasar ${n === 1 ? 'un archivo' : `${n} archivos`}`;
+  $('request-title').textContent = tx(n === 1 ? '{name} te quiere pasar un archivo' : '{name} te quiere pasar {n} archivos', { name: t.peerName, n });
   const shown = t.files.slice(0, 6);
   $('request-files').replaceChildren(
-    ...shown.map((f) => el('li', {}, el('span', { class: 'fname' }, f.name), el('span', { class: 'muted' }, formatBytes(f.size)))),
-    ...(n > shown.length ? [el('li', { class: 'muted' }, `y ${n - shown.length} más`)] : []),
+    ...shown.map((f) => el('li', {}, el('span', { class: 'fname', translate: 'no' }, f.name), el('span', { class: 'muted' }, formatBytes(f.size)))),
+    ...(n > shown.length ? [el('li', { class: 'muted' }, tx('y {n} más', { n: n - shown.length }))] : []),
   );
-  $('request-total').textContent = n > 1 ? `En total ${formatBytes(t.total)}` : '';
+  $('request-total').textContent = n > 1 ? tx('En total {size}', { size: formatBytes(t.total) }) : '';
   const warn = $('request-warn');
   warn.hidden = true;
   const dlg = $<HTMLDialogElement>('request-dlg');
@@ -559,7 +564,7 @@ async function showNextRequest() {
   const info = await storageInfo();
   const disk = await supportsDiskStreaming();
   if (info && info.free && t.total > info.free) {
-    warn.textContent = `Este dispositivo tiene lugar para ${formatBytes(info.free)} y esto pesa ${formatBytes(t.total)}. Liberá espacio o borrá recibidos antes de aceptar.`;
+    warn.textContent = tx('Este dispositivo tiene lugar para {free} y esto pesa {size}. Liberá espacio o borrá recibidos antes de aceptar.', { free: formatBytes(info.free), size: formatBytes(t.total) });
     warn.hidden = false;
   } else if (!disk && t.total > 1.5 * 2 ** 30) {
     warn.textContent = 'Este navegador guarda lo recibido en memoria. Con archivos tan grandes puede cerrarse; si podés, recibilo en una compu o un Android con Chrome.';
@@ -603,7 +608,7 @@ function download(r: Received) {
 }
 
 function renderReceived() {
-  const fmt = new Intl.DateTimeFormat('es-AR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+  const fmt = new Intl.DateTimeFormat(LOCALE, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
   $('received').replaceChildren(
     ...received.map((r) => {
       if (r.text !== undefined) {
@@ -611,12 +616,12 @@ function renderReceived() {
         return el('li', { class: 'row file' },
           el('span', { class: 'thumb icon' }, svg(ICONS.text)),
           el('div', { class: 'row-main' },
-            el('p', { class: 'row-title', title: r.text }, r.text),
-            el('p', { class: 'row-sub' }, `Texto, de ${r.from}, ${fmt.format(r.at)}`),
+            el('p', { class: 'row-title', title: r.text, translate: 'no' }, r.text),
+            el('p', { class: 'row-sub' }, tx('Texto, de {from}, {date}', { from: r.from, date: fmt.format(r.at) })),
             el('div', { class: 'row-actions' },
               el('button', { class: 'btn btn-small btn-primary', type: 'button', onclick: () => copyText(r.text!) }, 'Copiar'),
               link ? el('a', { class: 'btn btn-small', href: link, target: '_blank', rel: 'noopener' }, 'Abrir link') : null,
-              el('button', { class: 'btn btn-small', type: 'button', onclick: () => showText(r, `Texto de ${r.from}`) }, 'Ver'),
+              el('button', { class: 'btn btn-small', type: 'button', onclick: () => showText(r, tx('Texto de {from}', { from: r.from })) }, 'Ver'),
               el('button', { class: 'link-btn danger', type: 'button', onclick: () => removeReceived(r) }, 'Borrar'),
             ),
           ),
@@ -629,8 +634,8 @@ function renderReceived() {
       return el('li', { class: 'row file' },
         thumb,
         el('div', { class: 'row-main' },
-          el('p', { class: 'row-title', title: r.name }, r.name),
-          el('p', { class: 'row-sub' }, `${formatBytes(r.size)}, de ${r.from}, ${fmt.format(r.at)}`),
+          el('p', { class: 'row-title', title: r.name, translate: 'no' }, r.name),
+          el('p', { class: 'row-sub' }, tx('{size}, de {from}, {date}', { size: formatBytes(r.size), from: r.from, date: fmt.format(r.at) })),
           el('div', { class: 'row-actions' },
             el('button', { class: 'btn btn-small btn-primary', type: 'button', onclick: () => download(r) }, 'Descargar'),
             canPreview(r.type, r.name)
@@ -692,7 +697,7 @@ async function renderStorage() {
   const used = received.reduce((s, r) => s + r.size, 0);
   const info = await storageInfo();
   $('storage-line').textContent = received.length
-    ? `${formatBytes(used)}${info?.free ? `, quedan ${formatBytes(info.free)}` : ''}`
+    ? (info?.free ? tx('{used}, quedan {free}', { used: formatBytes(used), free: formatBytes(info.free) }) : formatBytes(used))
     : '';
 }
 
@@ -701,14 +706,14 @@ async function renderStorage() {
 function renderCloud() {
   $('cloud-panel').hidden = !drive.enabled;
   if (!drive.enabled) return;
-  const fmt = new Intl.DateTimeFormat('es-AR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+  const fmt = new Intl.DateTimeFormat(LOCALE, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
   const files = drive.ready ? drive.files : [];
   $('cloud-files').replaceChildren(
     ...files.map((f: CloudFile) =>
       el('li', { class: 'row file' },
         el('span', { class: 'thumb icon' }, svg(fileIcon(f.mimeType, f.name))),
         el('div', { class: 'row-main' },
-          el('p', { class: 'row-title', title: f.name }, f.name),
+          el('p', { class: 'row-title', title: f.name, translate: 'no' }, f.name),
           el('p', { class: 'row-sub' }, `${formatBytes(f.size)}, ${fmt.format(new Date(f.createdTime))}`),
           el('div', { class: 'row-actions' },
             el('button', { class: 'btn btn-small btn-primary', type: 'button', onclick: () => drive.download(f) }, 'Bajar'),
@@ -741,10 +746,10 @@ function renderCloud() {
   empty.textContent = drive.ready
     ? 'Todavía no subiste nada. Tocá "Tu nube" arriba, o arrastrá archivos encima, para subirlos. Lo que subas aparece acá con "Bajar" y "Pasar a…".'
     : drive.linked
-      ? `Tocá para ver lo que subiste con ${drive.email}.`
+      ? tx('Tocá para ver lo que subiste con {email}.', { email: drive.email })
       : 'Conectá tu Google Drive para subir archivos y verlos desde todos tus dispositivos. Cada persona usa su propia cuenta y su propio espacio; Pasalo solo ve lo que sube él.';
   const q = drive.ready ? drive.quota : null;
-  $('cloud-line').textContent = q ? (q.limit ? `Usaste ${formatBytes(q.usage)} de ${formatBytes(q.limit)}` : `Usaste ${formatBytes(q.usage)}`) : '';
+  $('cloud-line').textContent = q ? tx(q.limit ? 'Usaste {used} de {limit}' : 'Usaste {used}', { used: formatBytes(q.usage), limit: formatBytes(q.limit) }) : '';
 }
 
 $('cloud-connect').addEventListener('click', () => connectCloud());
@@ -775,7 +780,7 @@ function showPairCode(code: string, expires: number) {
   const tick = () => {
     const left = Math.max(0, Math.round((expires - Date.now()) / 1000));
     $('pair-expiry').textContent = left
-      ? `Escribilo en el otro dispositivo. Vence en ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}.`
+      ? tx('Escribilo en el otro dispositivo. Vence en {time}.', { time: `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}` })
       : 'El código venció.';
     if (!left) closePairCode();
   };
@@ -822,7 +827,7 @@ function renderSettings() {
     ...me.pairs.map((p) =>
       el('li', { class: 'row' },
         el('span', { class: 'thumb icon' }, svg(ICONS[p.kind] ?? ICONS.phone)),
-        el('div', { class: 'row-main' }, el('p', { class: 'row-title' }, p.name)),
+        el('div', { class: 'row-main' }, el('p', { class: 'row-title', translate: 'no' }, p.name)),
         el('button', { class: 'link-btn danger', type: 'button', onclick: () => unpair(p) }, 'Desvincular'),
       ),
     ),
@@ -833,7 +838,7 @@ function renderSettings() {
     ...me.hidden.map((h) =>
       el('li', { class: 'row' },
         el('span', { class: 'thumb icon' }, svg(ICONS[h.kind] ?? ICONS.phone)),
-        el('div', { class: 'row-main' }, el('p', { class: 'row-title' }, h.name)),
+        el('div', { class: 'row-main' }, el('p', { class: 'row-title', translate: 'no' }, h.name)),
         el('button', {
           class: 'link-btn', type: 'button',
           onclick: () => {
@@ -848,7 +853,7 @@ function renderSettings() {
   );
   renderThemeChoice();
   $('cloud-field').hidden = !drive.enabled || !drive.linked;
-  $('cloud-account').textContent = `Conectado con ${drive.email}. Al desconectar, lo que subiste sigue en tu Drive.`;
+  $('cloud-account').textContent = tx('Conectado con {email}. Al desconectar, lo que subiste sigue en tu Drive.', { email: drive.email });
 
   const standalone = matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone;
   const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
@@ -915,8 +920,8 @@ for (const dlg of document.querySelectorAll<HTMLDialogElement>('dialog.sheet')) 
 
 function renderMe() {
   const b = $('me-name');
-  b.replaceChildren(el('span', {}, me.name), svg(ICONS.pencil));
-  b.setAttribute('aria-label', `Te ven como ${me.name}. Cambiar nombre`);
+  b.replaceChildren(el('span', { translate: 'no' }, me.name), svg(ICONS.pencil));
+  b.setAttribute('aria-label', tx('Te ven como {name}. Cambiar nombre', { name: me.name }));
 }
 
 // ------------------------------------------------------------------ varios
@@ -1023,8 +1028,26 @@ function showBanner() {
   }
 }
 
+// ------------------------------------------------------------------ idioma
+
+function renderLangChoice() {
+  for (const b of document.querySelectorAll<HTMLButtonElement>('[data-lang-choice]')) {
+    b.setAttribute('aria-checked', String(b.dataset.langChoice === langChoice()));
+  }
+}
+for (const b of document.querySelectorAll<HTMLButtonElement>('[data-lang-choice]')) {
+  b.addEventListener('click', () => {
+    if (b.dataset.langChoice === langChoice()) return;
+    if (allTransfers().some((t) => !isFinal(t.status))) return toast('Esperá a que terminen las transferencias para cambiar el idioma.');
+    setLangChoice(b.dataset.langChoice as LangChoice);
+    location.reload();
+  });
+}
+
 // ------------------------------------------------------------------ arranque
 
+translatePage();
+renderLangChoice();
 applyTheme();
 renderMe();
 renderStatus();

@@ -3,6 +3,8 @@
 // se calcula al pasar, por eso va en un "data descriptor" después de los datos (como client-zip).
 // El tamaño total se sabe de antemano, así el receptor ve el progreso real. ZIP64 si pasa los 4 GB.
 
+import { t } from './i18n';
+
 /** Lo que se puede mandar: un File, un zip armado al vuelo o un archivo de Drive. */
 export interface Source {
   name: string;
@@ -146,7 +148,7 @@ export function zipSource(name: string, entries: ZipEntry[]): Source {
     while (hashed[i] < upTo) {
       const end = Math.min(upTo, hashed[i] + (8 << 20));
       const data = new Uint8Array(await f.slice(hashed[i], end).arrayBuffer());
-      if (!data.length) throw new Error(`"${entries[i].path}" cambió mientras se pasaba la carpeta. Probá de nuevo.`);
+      if (!data.length) throw new Error(t('"{path}" cambió mientras se pasaba la carpeta. Probá de nuevo.', { path: entries[i].path }));
       feed(i, hashed[i], data);
     }
   }
