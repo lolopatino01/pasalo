@@ -340,6 +340,10 @@ await D.reload();
 await D.waitForSelector('#cloud-files .row');
 ok((await D.textContent('#cloud-files')).includes('presentación.pdf'), 'después de recargar, la nube sigue conectada y lista lo subido');
 
+await D.click('#devices .device.cloud .device-btn');
+await D.click('#cloud-down');
+await D.waitForSelector('#cloud-panel.flash');
+ok(true, 'tocar "Tu nube" ofrece "Bajar de tu nube" y lleva a la lista');
 await D.click('#cloud-files .row button:has-text("Bajar")');
 await D.waitForFunction(() => window.__pasalo.received.some((r) => r.name === 'presentación.pdf'), null, { timeout: 60000 });
 const down = await D.evaluate(async () => {

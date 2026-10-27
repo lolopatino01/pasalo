@@ -327,8 +327,20 @@ function openSendSheet(id: string) {
   $('text-form').hidden = true;
   $('send-folder').hidden = !canPickFolder;
   $('send-text').hidden = id === CLOUD_ID;
+  $('cloud-down').hidden = id !== CLOUD_ID;
   $<HTMLDialogElement>('send-dlg').showModal();
 }
+
+$('cloud-down').addEventListener('click', () => {
+  $<HTMLDialogElement>('send-dlg').close();
+  if (!drive.files.length) return toast('Tu nube está vacía. Primero subí algo desde cualquier dispositivo y después lo bajás desde acá.');
+  const panel = $('cloud-panel');
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  panel.classList.remove('flash');
+  void panel.offsetWidth; // reiniciar la animación si ya estaba
+  panel.classList.add('flash');
+  toast('Tocá "Bajar" en el archivo que quieras traer.');
+});
 
 function pick(inputId: string) {
   pickTarget = sendTarget;
@@ -727,7 +739,7 @@ function renderCloud() {
   connect.textContent = drive.linked ? 'Ver mi nube' : 'Conectar Google Drive';
   empty.hidden = files.length > 0;
   empty.textContent = drive.ready
-    ? 'Todavía no subiste nada. Tocá "Tu nube" arriba, o arrastrá archivos encima, para subirlos.'
+    ? 'Todavía no subiste nada. Tocá "Tu nube" arriba, o arrastrá archivos encima, para subirlos. Lo que subas aparece acá con "Bajar" y "Pasar a…".'
     : drive.linked
       ? `Tocá para ver lo que subiste con ${drive.email}.`
       : 'Conectá tu Google Drive para subir archivos y verlos desde todos tus dispositivos. Cada persona usa su propia cuenta y su propio espacio; Pasalo solo ve lo que sube él.';
