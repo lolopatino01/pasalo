@@ -55,6 +55,9 @@ tests/e2e.mjs      Playwright: dos navegadores, 300 MB con SHA-256, rechazar, ca
   corre `tailscale serve --bg 3000`, arranca y abre el navegador en localhost. Registro en `servidor.log` (UTF-16 por
   Tee-Object). `detener-pasalo.bat` lo apaga.
 - Manual: `npm install && npm run build && npm start` → http://localhost:3000. Desarrollo: `npm run dev`.
+- GitHub Actions (`.github/workflows/ci.yml`) corre check, build y el e2e (directo y RELAY=1, SIZE_MB=100) en cada push
+  a main; la insignia está en los dos README (README.md en español, README.en.md en inglés: mantener los dos).
+- Versiones: v1.0.0 publicada como Release en GitHub (26/10/2026).
 - Pruebas: `GOOGLE_CLIENT_ID= PORT=3100 npm start` (sin el ID real del `.env`) y `npm run test:e2e` (necesita Playwright). `RELAY=1` fuerza el puente por el servidor.
 
 ## Estado (26/10/2026)
