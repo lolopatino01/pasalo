@@ -35,10 +35,6 @@ fetch('/config.json')
   .then((c) => {
     if (Array.isArray(c.iceServers)) iceServers = c.iceServers;
     if (typeof c.googleClientId === 'string') drive.init(c.googleClientId);
-    if (c.demo) {
-      $('banner').textContent = 'Esto es una demo pública: te ven los que están en tu misma red. Para usarlo en casa, instalalo en tu compu.';
-      $('banner').hidden = false;
-    }
   })
   .catch(() => {});
 

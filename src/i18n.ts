@@ -270,8 +270,6 @@ const EN: Record<string, string> = {
   'Estás usando Pasalo sin https. Podés pasar archivos, pero no instalarla, y lo que recibas se guarda en memoria.':
     'You are using Pasalo without https. You can send files, but not install it, and what you receive is kept in memory.',
   'Esperá a que terminen las transferencias para cambiar el idioma.': 'Wait for the transfers to finish before changing the language.',
-  'Esto es una demo pública: te ven los que están en tu misma red. Para usarlo en casa, instalalo en tu compu.':
-    'This is a public demo: people on your same network can see you. To use it at home, install it on your computer.',
 
   // ---- nombres por defecto
   '{base} {os}': '{os} {base}',

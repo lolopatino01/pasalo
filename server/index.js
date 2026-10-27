@@ -23,9 +23,6 @@ const DEV = process.argv.includes('--dev');
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
 const TRUST_PROXY = process.env.TRUST_PROXY === '1';
-// Demo pública (ver render.yaml): la app avisa que es una demo y el puente por el servidor tiene tope.
-const DEMO = process.env.DEMO === '1';
-const RELAY_LIMIT = Number(process.env.RELAY_LIMIT_MB || 0) * 2 ** 20;
 
 // ---------------------------------------------------------------- ICE config
 
@@ -109,7 +106,7 @@ function handleApi(req, res) {
   if (pathname === '/config.json') {
     res.writeHead(200, { ...SECURITY_HEADERS, 'Content-Type': MIME['.json'], 'Cache-Control': 'no-store' });
     // El Client ID de Google no es secreto: identifica a la app ante Google (ver README, "Nube").
-    res.end(JSON.stringify({ iceServers: iceServers(), googleClientId: process.env.GOOGLE_CLIENT_ID || '', build: currentBuild(), demo: DEMO }));
+    res.end(JSON.stringify({ iceServers: iceServers(), googleClientId: process.env.GOOGLE_CLIENT_ID || '', build: currentBuild() }));
     return true;
   }
   if (pathname === '/health') {
@@ -343,13 +340,6 @@ function relayBinary(client, data) {
   if (!client.id || !Buffer.isBuffer(data) || data.length < 16) return;
   const target = clients.get(data.subarray(0, 16).toString('hex'));
   if (!target || !canSee(client, target) || target.ws.readyState !== 1) return;
-  client.relayed = (client.relayed || 0) + data.length;
-  if (RELAY_LIMIT && client.relayed > RELAY_LIMIT) {
-    // Cortar la conexión del que manda: su transferencia falla con "se cortó" en vez de quedar colgada.
-    if (!client.capped) log(`[puente: tope] ${client.name} pasó ${RELAY_LIMIT >> 20} MB por el servidor`);
-    client.capped = true;
-    return void client.ws.close(4000, 'tope del puente');
-  }
   Buffer.from(client.id, 'hex').copy(data, 0);
   target.ws.send(data, { binary: true });
 }

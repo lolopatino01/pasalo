@@ -98,6 +98,5 @@ Pendiente / a revisar:
   Textos fijos se traducen solos al aparecer (MutationObserver, coincidencia exacta); los que llevan datos van con
   `t('… {nombre} …', { nombre })` (en main.ts se importa como `tx`). Lo que escribe la gente (nombres de dispositivos y
   archivos, textos) va con `translate="no"`. Idioma: navegador en español → es, si no en; se elige en Ajustes.
-- Demo pública: `render.yaml` (botón Deploy to Render del README) con DEMO=1 y RELAY_LIMIT_MB=200.
 - Probar cambios con `npx tsc --noEmit`, `npm run build` y el e2e (incluido `RELAY=1`).
 - `lanAddresses` saltea adaptadores de VirtualBox (192.168.56.x, MAC 0a:00:27) para no mostrarlos como dirección.

@@ -18,8 +18,6 @@ Compu, iPhone, Android y tablet, en cualquier dirección. Sin cables, sin instal
 
 [Cómo funciona](#cómo-funciona) · [Instalación](#instalación) · [Desde el celular](#usarlo-desde-el-celular-y-la-tablet) · [Tu nube](#tu-nube-google-drive) · [Privacidad](#privacidad-y-seguridad)
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/lolopatino01/pasalo)
-
 <br>
 
 <img src="docs/hero.png" alt="Pasalo en una compu mandándole un video a un iPhone, con el anillo de progreso alrededor de cada dispositivo">
@@ -213,8 +211,6 @@ Variables de entorno, o un archivo `.env` en la carpeta del proyecto (una por l�
 | `STUN_URLS` | Google y Cloudflare | Servidores STUN, separados por coma |
 | `TURN_URL`, `TURN_USERNAME`, `TURN_CREDENTIAL` | vacío | Servidor TURN opcional, para redes que bloquean la conexión directa |
 | `SSL_CERT`, `SSL_KEY` | vacío | Rutas a un certificado para servir `https` directo |
-| `DEMO` | apagado | `1` para una demo pública: la app avisa que la ve cualquiera de la misma red |
-| `RELAY_LIMIT_MB` | sin tope | Máximo de MB que cada dispositivo puede pasar por el servidor cuando la conexión directa no se arma |
 
 ### En un servidor (Raspberry Pi, VPS)
 
@@ -225,13 +221,6 @@ docker run -d --restart unless-stopped -p 3000:3000 -e GOOGLE_CLIENT_ID=... pasa
 
 Si queda detrás de un proxy en otra máquina, agregá `-e TRUST_PROXY=1` para que el servidor vea la IP real de cada
 dispositivo y agrupe bien "tu red".
-
-### Una demo pública en Render (gratis)
-
-El botón **Deploy to Render** de arriba crea una copia en tu cuenta de [Render](https://render.com) con
-[`render.yaml`](render.yaml): plan gratis, `https` incluido y modo demo (aviso para los visitantes y un tope a lo que pasa
-por el servidor). Sirve para que alguien pruebe Pasalo entre dos pestañas o dos dispositivos sin instalar nada. En el plan
-gratis el servidor se duerme si nadie lo usa, así que la primera visita tarda alrededor de un minuto en abrir.
 
 ## Si algo no anda
 
