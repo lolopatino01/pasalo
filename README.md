@@ -7,7 +7,7 @@
 **Pasá archivos, carpetas y textos directo entre tus dispositivos.**<br>
 Compu, iPhone, Android y tablet, en cualquier dirección. Sin cables, sin instalar nada y sin pasar por ningún servidor.
 
-<sub>🇬🇧 A free, open-source AirDrop for every device: send files, folders and text peer-to-peer, right from the browser.</sub>
+<sub><b>English:</b> a free, open-source AirDrop for every device: send files, folders and text peer-to-peer, right from the browser.</sub>
 
 [![Licencia MIT](https://img.shields.io/badge/licencia-MIT-2F4BFF?style=flat-square)](LICENSE)
 [![PWA](https://img.shields.io/badge/PWA-instalable-2F4BFF?style=flat-square)](#instalación)
