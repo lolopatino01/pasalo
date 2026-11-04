@@ -276,8 +276,9 @@ const EN: Record<string, string> = {
   'En otra pestaña': 'In another tab',
   'Cambiar a modo claro': 'Switch to light mode',
   'Cambiar a modo oscuro': 'Switch to dark mode',
-  'Estás usando Pasalo sin https. Podés pasar archivos, pero no instalarla, y lo que recibas se guarda en memoria.':
-    'You are using Pasalo without https. You can send files, but not install it, and what you receive is kept in memory.',
+  'Estás usando Pasalo sin https: cualquiera en tu wifi podría ver lo que pasa por el servidor. Usá la dirección de Tailscale. Así tampoco se puede instalar, y lo que recibas se guarda en memoria.':
+    'You are using Pasalo without https: anyone on your Wi-Fi could see what goes through the server. Use the Tailscale address. This way it also can’t be installed, and what you receive is kept in memory.',
+  'El otro dispositivo mandó más de lo que dijo. Corté la transferencia.': 'The other device sent more than it said it would. The transfer was stopped.',
   'Esperá a que terminen las transferencias para cambiar el idioma.': 'Wait for the transfers to finish before changing the language.',
 
   // ---- nombres por defecto
@@ -298,6 +299,12 @@ const EN: Record<string, string> = {
   'Sin conexión con el servidor.': 'No connection to the server.',
   'No hay espacio suficiente para guardar el archivo en este dispositivo.': 'There is not enough space on this device to save the file.',
   'Ese código no existe o ya venció. Generá uno nuevo en el otro dispositivo.': 'That code does not exist or has expired. Create a new one on the other device.',
+  'Ese código ya no sirve. Generá uno nuevo en el otro dispositivo.': 'That code is no longer valid. Create a new one on the other device.',
+  'Demasiados intentos fallidos. Esperá unos minutos y generá un código nuevo.': 'Too many failed attempts. Wait a few minutes and create a new code.',
+  'El otro dispositivo rechazó la vinculación.': 'The other device rejected the pairing.',
+  'El otro dispositivo se desconectó. Generá un código nuevo.': 'The other device disconnected. Create a new code.',
+  'Esperando que el otro dispositivo confirme…': 'Waiting for the other device to confirm…',
+  '"{name}" quiere vincularse. Si no fuiste vos, rechazalo.': '"{name}" wants to pair. If it wasn’t you, reject it.',
   'Se venció el permiso de Drive. Tocá "Tu nube" para conectar de nuevo.': 'Your Drive permission expired. Tap "Your cloud" to connect again.',
   'Se venció el permiso de Drive. Tocá "Tu nube" para conectar de nuevo y volvé a subirlo.': 'Your Drive permission expired. Tap "Your cloud" to connect again and upload it again.',
   'Drive no devolvió dónde subir el archivo. Probá de nuevo.': 'Drive did not say where to upload the file. Try again.',

@@ -1,7 +1,10 @@
 // Prueba de punta a punta: dos "dispositivos" (dos navegadores) se pasan archivos.
 // Uso: node server/index.js (en otro terminal, PORT=3100) y después node tests/e2e.mjs
 import { chromium } from 'playwright';
+import { WebSocket } from 'ws';
+import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';
+import net from 'node:net';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -72,7 +75,12 @@ const phone = await browser.newContext({ locale: 'es-AR',
 });
 const A = await pc.newPage();
 const B = await phone.newPage();
-for (const [n, p] of [['A', A], ['B', B]]) p.on('pageerror', (e) => console.log(`[${n} error]`, e.message));
+const cspErrors = [];
+const watchCsp = (p) => p.on('console', (m) => /Content Security Policy/i.test(m.text()) && cspErrors.push(m.text()));
+for (const [n, p] of [['A', A], ['B', B]]) {
+  p.on('pageerror', (e) => console.log(`[${n} error]`, e.message));
+  watchCsp(p);
+}
 
 await A.goto(BASE);
 await B.goto(BASE);
@@ -152,6 +160,25 @@ const opfs = await B.evaluate(async () => {
 });
 ok(opfs === 2, 'y limpia lo escrito en disco');
 
+// ---- 5b. Un recibido con código adentro no corre dentro de la app
+const bait = '<script>localStorage.setItem("poc", "1")</script>';
+await sendFiles(A, toB, [
+  { name: 'nota.txt', mimeType: 'text/html', buffer: Buffer.from(bait) },
+  { name: 'foto.jpg', mimeType: 'image/svg+xml', buffer: Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg">${bait}</svg>`) },
+]);
+await B.waitForSelector('#request-dlg[open]');
+await B.click('#request-dlg button[value=accept]');
+await B.waitForFunction(() => window.__pasalo.received.length === 4);
+const baitTypes = await B.evaluate(() => window.__pasalo.received.map((r) => r.type));
+ok(baitTypes.includes('text/html') && baitTypes.includes('image/svg+xml'), 'el emisor pudo declarar tipos peligrosos');
+ok((await B.locator('#received .row:has-text("foto.jpg") a:has-text("Abrir")').count()) === 0
+  && (await B.locator('#received .row:has-text("foto.jpg") img').count()) === 0, 'un SVG no se puede abrir ni se muestra como foto');
+const [opened] = await Promise.all([phone.waitForEvent('page'), B.click('#received .row:has-text("nota.txt") a:has-text("Abrir")')]);
+await opened.waitForLoadState();
+ok((await opened.evaluate(() => document.body.innerText)).includes('<script>'), 'un HTML disfrazado de .txt se abre como texto');
+await opened.close();
+ok((await B.evaluate(() => localStorage.getItem('poc'))) === null, 'y su script no corre');
+
 // ---- 6. Vincular con código (tercer dispositivo)
 const tablet = await browser.newContext({ locale: 'es-AR', viewport: { width: 820, height: 1180 }, userAgent: 'Mozilla/5.0 (Linux; Android 14; SM-X710) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36' });
 const C = await tablet.newPage();
@@ -168,6 +195,18 @@ await C.waitForSelector('#pair-error:not([hidden])');
 ok(true, 'código incorrecto muestra error');
 await C.fill('#pair-input', code);
 await C.click('#pair-form button');
+await C.waitForSelector('#pair-wait:not([hidden])');
+await A.waitForSelector('#pair-confirm:not([hidden])');
+ok((await A.evaluate(() => window.__pasalo.me.pairs.length)) === 0, 'acertar el código no vincula: el otro tiene que confirmar');
+await A.click('#pair-reject');
+await C.waitForSelector('#pair-error:not([hidden])');
+ok((await C.textContent('#pair-error')).includes('rechazó'), 'rechazar avisa al que pidió vincularse');
+await A.click('#pair-show');
+await A.waitForSelector('#pair-code-box:not([hidden])');
+await C.fill('#pair-input', (await A.textContent('#pair-code')).replace(/\D/g, ''));
+await C.click('#pair-form button');
+await A.waitForSelector('#pair-confirm:not([hidden])');
+await A.click('#pair-accept');
 await C.waitForFunction(() => window.__pasalo.me.pairs.length === 1);
 await A.waitForFunction(() => window.__pasalo.me.pairs.length === 1);
 ok(true, 'vinculación con código funciona en los dos lados');
@@ -262,6 +301,52 @@ await E.waitForSelector('#devices .device:not(.offline)');
 ok((await E.textContent('h1')) === '¿A dónde lo pasás?', 'en Ajustes se puede elegir español y queda guardado');
 await english.close();
 
+// ---- 11c. Un dispositivo malicioso: el receptor no le cree nada
+const intruder = new WebSocket(BASE.replace('http', 'ws') + '/ws', { origin: new URL(BASE).origin });
+const fromB = [];
+let intruderId = '';
+intruder.on('message', (d, bin) => {
+  if (bin) return;
+  const m = JSON.parse(d);
+  if (m.t === 'welcome') intruderId = m.id;
+  if (m.t === 'relay') fromB.push(JSON.parse(m.data));
+});
+await new Promise((r) => intruder.on('open', r));
+intruder.send(JSON.stringify({ t: 'hello', secret: crypto.randomBytes(16).toString('hex'), name: 'Intruso', kind: 'phone', pairs: [] }));
+await B.waitForFunction(() => window.__pasalo.peers.some((p) => p.name === 'Intruso'));
+const bId = await B.evaluate(() => window.__pasalo.me.id);
+const toVictim = (m) => intruder.send(JSON.stringify({ t: 'relay', to: bId, data: JSON.stringify(m) }));
+const answer = async (t, id) => {
+  for (let i = 0; i < 300; i++) {
+    if (fromB.some((m) => m.t === t && m.id === id)) return true;
+    await B.waitForTimeout(10);
+  }
+  return false;
+};
+toVictim({ t: 'offer', id: '../recibidos', files: [{ name: 'x', size: 1, type: '' }], total: 1 });
+toVictim({ t: 'offer', id: '1'.repeat(16), files: [{ name: 'x', size: '1e999', type: '' }], total: 0 });
+await B.waitForTimeout(300);
+ok(!(await B.isVisible('#request-dlg')), 'ofertas con id o tamaño inválidos se ignoran');
+const offerId = '2'.repeat(16);
+toVictim({ t: 'offer', id: offerId, files: [{ name: 'foto\u202Egpj.exe', size: 10, type: 'image/png' }], total: 10 });
+await B.waitForSelector('#request-dlg[open]');
+ok(!(await B.textContent('#request-files')).includes('\u202E'), 'los caracteres que dan vuelta un nombre de archivo se sacan');
+await B.click('#request-dlg button[value=accept]');
+ok(await answer('accept', offerId), 'el intruso recibe el permiso por lo que declaró');
+toVictim({ t: 'file', id: offerId, index: 'length' });
+toVictim({ t: 'file', id: offerId, index: 0 });
+intruder.send(Buffer.concat([Buffer.from(bId, 'hex'), Buffer.alloc(11)]));
+ok(await answer('cancel', offerId), 'mandar más de lo declarado corta la transferencia');
+ok((await B.evaluate((id) => window.__pasalo.manager.transfers.get(id).status, offerId)) === 'error', 'y queda como error');
+await B.evaluate((id) => window.__pasalo.me.hidden.push({ id, name: 'Intruso', kind: 'phone' }), intruderId);
+toVictim({ t: 'offer', id: '3'.repeat(16), files: [{ name: 'x', size: 1, type: '' }], total: 1 });
+ok((await answer('decline', '3'.repeat(16))) && !(await B.isVisible('#request-dlg')), 'un dispositivo quitado de la lista queda bloqueado');
+toVictim({ t: 'text', id: '4'.repeat(16), text: 'pasame tu clave' });
+await B.waitForTimeout(300);
+ok(!(await B.isVisible('#text-dlg')), 'y tampoco le puede mandar textos');
+intruder.close();
+await B.evaluate(() => window.__pasalo.me.hidden.pop());
+
 // ---- 12. Tu nube (Google Drive simulado: el script de Google y la API se responden acá)
 const mid = path.join(tmp, 'presentación.pdf');
 fs.writeFileSync(mid, crypto.randomBytes(20 << 20)); // 3 trozos de 8 MB
@@ -338,6 +423,7 @@ await cloud.route('https://www.googleapis.com/**', async (route) => {
 });
 const D = await cloud.newPage();
 D.on('pageerror', (e) => console.log('[D error]', e.message));
+watchCsp(D);
 await D.goto(BASE);
 await D.waitForSelector('#devices .device.cloud');
 ok(await D.isVisible('#cloud-connect'), 'aparece "Tu nube" con el botón para conectar Drive');
@@ -390,6 +476,91 @@ await D.click('#cloud-disconnect');
 await D.waitForFunction(() => !window.__pasalo.drive.linked && document.querySelector('#cloud-connect').textContent === 'Conectar Google Drive');
 ok(true, 'desconectar Drive deja la nube como al principio');
 await cloud.close();
+ok(cspErrors.length === 0, `la política de seguridad (CSP) no bloquea nada de la app ${cspErrors[0] ?? ''}`);
+
+// ---- 13. Ataques al servidor (uno propio y aparte: el límite de intentos duraría entre corridas)
+const PORT2 = Number(new URL(BASE).port) + 1;
+const server2 = spawn(process.execPath, ['server/index.js'], { env: { ...process.env, PORT: PORT2, HOST: '127.0.0.1', GOOGLE_CLIENT_ID: '' }, stdio: ['ignore', 'pipe', 'ignore'] });
+let log2 = '';
+server2.stdout.on('data', (d) => (log2 += d));
+for (let i = 0; i < 50 && !(await fetch(`http://127.0.0.1:${PORT2}/health`).catch(() => null)); i++) await new Promise((r) => setTimeout(r, 100));
+const ORIGIN = `http://localhost:${PORT2}`;
+function conn(secret, origin = ORIGIN, extra = {}) {
+  const c = { msgs: [], closed: null, ws: new WebSocket(`ws://localhost:${PORT2}/ws`, { origin }) };
+  c.ws.on('message', (d) => c.msgs.push(JSON.parse(d)));
+  c.ws.on('close', (code) => (c.closed ??= code));
+  c.ws.on('error', () => (c.closed ??= 'rechazada'));
+  c.send = (m) => c.ws.send(JSON.stringify(m));
+  c.wait = async (t) => {
+    for (let i = 0; i < 300; i++) {
+      const m = c.msgs.find((x) => x.t === t);
+      if (m) return m;
+      await new Promise((r) => setTimeout(r, 10));
+    }
+  };
+  c.ws.on('open', () => c.send({ t: 'hello', secret, name: 'prueba', kind: 'phone', pairs: [], ...extra }));
+  return c;
+}
+const secret = () => crypto.randomBytes(16).toString('hex');
+
+const foreign = conn(secret(), 'https://sitio-malicioso.example');
+await new Promise((r) => setTimeout(r, 300));
+ok(foreign.closed === 'rechazada', 'el servidor rechaza páginas de otro sitio');
+const rebinding = conn(secret(), `http://sitio-malicioso.example:${PORT2}`);
+await new Promise((r) => setTimeout(r, 300));
+ok(rebinding.closed === 'rechazada', 'y las que no coinciden con la dirección pedida');
+
+const victim = conn(secret());
+const { id: victimId } = await victim.wait('welcome');
+const thief = conn(victimId); // el id público usado como si fuera el secreto
+const { id: thiefId } = await thief.wait('welcome');
+await new Promise((r) => setTimeout(r, 200));
+ok(thiefId !== victimId && victim.closed === null, 'conocer el id de un dispositivo no sirve para hacerse pasar por él');
+
+const creator = conn(secret());
+await creator.wait('welcome');
+creator.send({ t: 'pair-create' });
+const { code: realCode } = await creator.wait('pair-code');
+const brute = conn(secret());
+await brute.wait('welcome');
+for (let i = 0; i < 25; i++) brute.send({ t: 'pair-join', code: String(i).padStart(6, '0') === realCode ? '999999' : String(i).padStart(6, '0') });
+await new Promise((r) => setTimeout(r, 300));
+brute.msgs.length = 0;
+brute.send({ t: 'pair-join', code: realCode });
+const locked = await brute.wait('pair-error');
+ok(locked?.reason.includes('Demasiados') && !brute.msgs.some((m) => m.t === 'pair-wait'), 'tras muchos intentos fallidos, ni el código correcto sirve');
+
+// ---- 14. Nada de lo que llegue por la red apaga el servidor
+const rawHttp = (text) => new Promise((res) => {
+  let got = '';
+  const s = net.connect(PORT2, '127.0.0.1', () => s.write(text));
+  s.on('data', (d) => (got += d));
+  s.on('error', () => {});
+  setTimeout(() => (s.destroy(), res(got)), 150);
+});
+ok((await rawHttp('GET / HTTP/1.1\r\nHost: sitio-malicioso.example\r\n\r\n')).startsWith('HTTP/1.1 403'), 'un nombre ajeno en Host se rechaza (DNS rebinding)');
+for (const p of ['//', '/%00', '/x%00.js']) await rawHttp('GET ' + p + ' HTTP/1.1\r\nHost: localhost\r\n\r\n');
+await rawHttp('GET // HTTP/1.1\r\nHost: localhost\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n');
+const trap = { toString: 1, valueOf: 1 };
+conn(trap);
+conn(secret(), ORIGIN, { name: trap });
+conn(secret(), ORIGIN, { pairs: [trap] });
+const fuzz = conn(secret());
+await fuzz.wait('welcome');
+for (const m of [{ t: 'diag', to: 'x' }, { t: 'diag', to: trap }, { t: 'rename', name: trap }, { t: 'pair-join', code: trap }, { t: 'unpair', key: trap }, { t: 'signal', to: trap, data: 1 }]) fuzz.send(m);
+const huge = conn(secret());
+await huge.wait('welcome');
+huge.ws.send(Buffer.alloc(300 * 1024));
+const broken = conn(secret());
+await broken.wait('welcome');
+broken.ws._socket.write(Buffer.from([0xff, 0x80, 0, 0, 0, 0]));
+await new Promise((r) => setTimeout(r, 400));
+const health2 = async () => !!(await fetch('http://127.0.0.1:' + PORT2 + '/health').catch(() => null));
+ok(server2.exitCode === null && (await health2()) && !log2.includes('[error]'), 'los pedidos y mensajes malformados no lo apagan ni le causan errores');
+const crowd = Array.from({ length: 110 }, () => conn(secret()));
+await new Promise((r) => setTimeout(r, 600));
+ok(crowd.some((c) => c.closed === 'rechazada') && (await health2()), 'hay un tope de conexiones');
+server2.kill();
 
 await browser.close();
 fs.rmSync(tmp, { recursive: true, force: true });

@@ -8,12 +8,7 @@
     <meta name="theme-color" content="#EDF0EA" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#0F1513" media="(prefers-color-scheme: dark)" />
     <meta name="color-scheme" content="light dark" />
-    <script>
-      try {
-        var t = localStorage.getItem('pasalo.theme');
-        if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
-      } catch (e) {}
-    </script>
+    <script src="/theme.js"></script>
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/favicon.png" type="image/png" />
     <link rel="icon" href="/icons/logo.svg" type="image/svg+xml" />
@@ -148,12 +143,20 @@
           <div id="pair-code-box" hidden>
             <output id="pair-code" class="pair-code"></output>
             <p id="pair-expiry" class="muted small"></p>
+            <div id="pair-confirm" hidden>
+              <p id="pair-confirm-text" translate="no"></p>
+              <div class="actions">
+                <button id="pair-reject" class="btn" type="button">Rechazar</button>
+                <button id="pair-accept" class="btn btn-primary" type="button">Vincular</button>
+              </div>
+            </div>
           </div>
         </div>
         <form id="pair-form" class="pair-col">
           <h3><label for="pair-input">En el otro dispositivo</label></h3>
           <input id="pair-input" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="6 números" required />
           <button class="btn btn-primary" type="submit">Vincular</button>
+          <p id="pair-wait" class="muted small" hidden>Esperando que el otro dispositivo confirme…</p>
           <p id="pair-error" class="warn" hidden></p>
         </form>
       </div>

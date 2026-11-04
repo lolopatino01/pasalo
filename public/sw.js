@@ -2,7 +2,7 @@
 // y recibe archivos compartidos desde otras apps (Android: "Compartir → Pasalo").
 const SHELL_CACHE = 'pasalo-shell-v1';
 const SHARE_CACHE = 'pasalo-share';
-const SHELL = ['/', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/logo.svg'];
+const SHELL = ['/', '/theme.js', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/logo.svg'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(SHELL_CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

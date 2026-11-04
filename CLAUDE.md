@@ -40,6 +40,22 @@ tests/e2e.mjs      Playwright: dos navegadores, 300 MB con SHA-256, rechazar, ca
 - Descubrimiento: el servidor agrupa por red (IP privada → "local"; IP pública → misma casa). Vinculación entre redes con
   código de 6 dígitos (clave guardada en ambos lados).
 - El servidor confía en `X-Forwarded-For` solo si viene de loopback o con `TRUST_PROXY=1`.
+- Identidad: cada dispositivo guarda un `secret` (nunca se muestra) y lo manda en `hello`; el id público es su SHA-256
+  recortado, lo calcula el servidor y llega en `welcome`. Conocer el id no sirve para hacerse pasar por nadie. Los
+  vinculados se reconocen por la clave (`keys` en `peers`), no por el id. El WebSocket solo atiende páginas propias
+  (`fromOwnPage`: Origin igual al host, y host `localhost`, IP, `*.ts.net` o `ALLOWED_HOSTS`).
+- Vincular: acertar el código no alcanza; `pair-join` → `pair-request` al creador → `pair-reply` → `paired`. Tope global de
+  20 códigos fallidos cada 5 min (al llegar, caen todos los códigos activos): por eso alcanzan 6 dígitos.
+- Recibidos: el tipo lo elige quien manda, así que `safeType` (util.ts) decide con qué tipo se abre: HTML y SVG solo se
+  descargan. Hay CSP (server/index.js) y la heredan los `blob:`. Sin scripts dentro del HTML: por eso `public/theme.js`.
+  Del otro dispositivo no se cree nada: id e index validados, y se corta si manda más de lo declarado. Quitar de la lista
+  también bloquea.
+- Red: si Tailscale está conectado y publica Pasalo, el servidor escucha solo en 127.0.0.1 (por la wifi todo viajaría sin
+  cifrar y entraría cualquiera); si no, en 0.0.0.0 con aviso. `HOST` en `.env` manda sobre esto. El Host de cada pedido se
+  revisa contra DNS rebinding (`hostAllowed`; un dominio propio va en `ALLOWED_HOSTS`).
+- Servidor robusto: todo lo que llega de la red se valida antes de usar (`clean`, `isId`), cada WebSocket tiene `on('error')`
+  y hay tope de conexiones, de cola del puente y de líneas por minuto en el registro. En `tests/e2e.mjs` están los pedidos
+  que antes lo apagaban. Revisión de seguridad completa el 4/11/2026.
 - Si la compu abre la app por su propia IP de red, el servidor redirige a `http://localhost:3000` (evita identidades duplicadas).
 - Protocolo por DataChannel: offer → accept/decline → file / trozos binarios / file-end → done → received; ack con bytes escritos.
   Texto: {t:text} → received, sin aceptar (máx. 10.000 caracteres); el receptor lo guarda como un recibido con `text`.

@@ -104,6 +104,19 @@ export function fileIcon(type: string, name: string): string {
   return ICONS.file;
 }
 
+const BINARY = 'application/octet-stream';
+
+/**
+ * Tipo con el que se puede abrir un recibido. El original lo eligió quien lo mandó, y un HTML o SVG
+ * abierto tal cual correría dentro de Pasalo: leería los recibidos, las claves y el permiso de Drive.
+ */
+export function safeType(type: string, name: string): string {
+  const t = type.split(';')[0].trim().toLowerCase();
+  if (/^image\/(png|jpeg|gif|webp|avif|bmp|heic|heif)$/.test(t) || /^(video|audio)\/[\w.+-]+$/.test(t) || t === 'application/pdf') return t;
+  if (t.startsWith('text/') || /\.txt$/i.test(name)) return 'text/plain';
+  return /\.pdf$/i.test(name) ? 'application/pdf' : BINARY;
+}
+
 export function canPreview(type: string, name: string): boolean {
-  return /^(image|video|audio)\//.test(type) || type === 'application/pdf' || /\.(pdf|txt)$/i.test(name) || type.startsWith('text/');
+  return safeType(type, name) !== BINARY;
 }

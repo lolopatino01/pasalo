@@ -7,6 +7,8 @@ export interface RemotePeer {
   name: string;
   kind: DeviceKind;
   via: ('red' | 'vinculado')[];
+  /** Claves de vinculación en común con este dispositivo. */
+  keys: string[];
 }
 
 export type ServerMsg =
@@ -16,11 +18,13 @@ export type ServerMsg =
   | { t: 'relay'; from: string; data: string }
   | { t: 'pair-code'; code: string; expires: number }
   | { t: 'pair-error'; reason: string }
+  | { t: 'pair-wait' }
+  | { t: 'pair-request'; name: string }
   | { t: 'paired'; key: string; peer: { id: string; name: string; kind: DeviceKind } };
 
 export type SignalData = { description?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit | null };
 
-type Hello = () => { id: string; name: string; kind: DeviceKind; pairs: string[] };
+type Hello = () => { secret: string; name: string; kind: DeviceKind; pairs: string[] };
 
 const hexToBytes = (hex: string) => Uint8Array.from(hex.match(/../g)!, (h) => parseInt(h, 16));
 const bytesToHex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');

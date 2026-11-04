@@ -9,7 +9,7 @@ import {
 import { takeSharedFiles } from './share';
 import { CLOUD_ID, Drive, type CloudFile } from './drive';
 import { readDropped, zipsFromPicked, type Source } from './zip';
-import { ICONS, canPreview, el, fileIcon, formatBytes, formatDuration, randomHex, svg, type DeviceKind } from './util';
+import { ICONS, canPreview, el, fileIcon, formatBytes, formatDuration, randomHex, safeType, svg, type DeviceKind } from './util';
 import { LOCALE, langChoice, setLangChoice, t as tx, translatePage, type LangChoice } from './i18n';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -26,8 +26,8 @@ let pendingFromCloud = false;
 const requestQueue: Transfer[] = [];
 let pickTarget: string | null = null;
 
-const signaling = new Signaling(() => ({ id: me.id, name: me.name, kind: me.kind, pairs: me.pairs.map((p) => p.key) }));
-const manager = new TransferManager(me.id, signaling, () => iceServers, (id) => nameOf(id));
+const signaling = new Signaling(() => ({ secret: me.secret, name: me.name, kind: me.kind, pairs: me.pairs.map((p) => p.key) }));
+const manager = new TransferManager(() => me.id, signaling, () => iceServers, (id) => nameOf(id));
 const drive = new Drive();
 
 fetch('/config.json')
@@ -52,15 +52,20 @@ signaling.addEventListener('status', renderStatus);
 signaling.addEventListener('message', (e) => {
   const msg = (e as CustomEvent<ServerMsg>).detail;
   switch (msg.t) {
+    case 'welcome':
+      me.id = msg.id;
+      saveIdentity(me);
+      break;
     case 'peers': {
       const gone = peers.filter((p) => !msg.peers.some((q) => q.id === p.id));
       peers = msg.peers;
       gone.forEach((p) => manager.peerGone(p.id));
-      // Mantener al día los nombres de los vinculados
+      // Mantener al día los vinculados: se reconocen por la clave, que no cambia aunque cambie el id.
       let dirty = false;
       for (const pair of me.pairs) {
-        const live = peers.find((p) => p.id === pair.peerId);
-        if (live && (live.name !== pair.name || live.kind !== pair.kind)) {
+        const live = peers.find((p) => p.keys.includes(pair.key));
+        if (live && (live.id !== pair.peerId || live.name !== pair.name || live.kind !== pair.kind)) {
+          pair.peerId = live.id;
           pair.name = live.name;
           pair.kind = live.kind;
           dirty = true;
@@ -74,8 +79,17 @@ signaling.addEventListener('message', (e) => {
       showPairCode(msg.code, msg.expires);
       break;
     case 'pair-error':
+      $('pair-wait').hidden = true;
+      if (!$('pair-confirm').hidden) closePairCode();
       $('pair-error').textContent = msg.reason;
       $('pair-error').hidden = false;
+      break;
+    case 'pair-wait':
+      $('pair-wait').hidden = false;
+      break;
+    case 'pair-request':
+      $('pair-confirm-text').textContent = tx('"{name}" quiere vincularse. Si no fuiste vos, rechazalo.', { name: msg.name });
+      $('pair-confirm').hidden = false;
       break;
     case 'paired': {
       const pairing: Pairing = { key: msg.key, peerId: msg.peer.id, name: msg.peer.name, kind: msg.peer.kind, since: Date.now() };
@@ -107,8 +121,12 @@ drive.addEventListener('state', () => {
   renderDevices();
 });
 
+const isHidden = (id: string) => me.hidden.some((h) => h.id === id);
+
 manager.addEventListener('request', (e) => {
-  requestQueue.push((e as CustomEvent<Transfer>).detail);
+  const t = (e as CustomEvent<Transfer>).detail;
+  if (isHidden(t.peerId)) return manager.decline(t.id); // quitarlo de la lista también lo bloquea
+  requestQueue.push(t);
   if (!$<HTMLDialogElement>('request-dlg').open) showNextRequest();
   updateTitle();
 });
@@ -136,7 +154,8 @@ drive.addEventListener('received', (e) => {
 });
 
 manager.addEventListener('text', async (e) => {
-  const { peerName, text } = (e as CustomEvent<{ peerName: string; text: string }>).detail;
+  const { peerId, peerName, text } = (e as CustomEvent<{ peerId: string; peerName: string; text: string }>).detail;
+  if (isHidden(peerId)) return;
   const r = await saveText(randomHex(8), text, peerName);
   received.unshift(r);
   renderReceived();
@@ -593,7 +612,7 @@ function updateTitle() {
 const objectUrls = new Map<string, string>();
 function urlFor(r: Received) {
   let u = objectUrls.get(r.id);
-  if (!u) objectUrls.set(r.id, (u = URL.createObjectURL(r.file)));
+  if (!u) objectUrls.set(r.id, (u = URL.createObjectURL(r.file.slice(0, r.file.size, safeType(r.type, r.name)))));
   return u;
 }
 
@@ -624,7 +643,7 @@ function renderReceived() {
           ),
         );
       }
-      const thumb = r.type.startsWith('image/') && r.size < 40 * 2 ** 20
+      const thumb = safeType(r.type, r.name).startsWith('image/') && r.size < 40 * 2 ** 20
         ? el('img', { class: 'thumb', src: urlFor(r), alt: '', loading: 'lazy', decoding: 'async' })
         : el('span', { class: 'thumb icon' }, svg(fileIcon(r.type, r.name)));
       const shareable = 'canShare' in navigator && navigator.canShare({ files: [r.file as File] });
@@ -762,6 +781,7 @@ let pairTimer = 0;
 
 $('pair-btn').addEventListener('click', () => {
   $('pair-error').hidden = true;
+  $('pair-wait').hidden = true;
   $<HTMLInputElement>('pair-input').value = '';
   $<HTMLDialogElement>('pair-dlg').showModal();
 });
@@ -788,9 +808,19 @@ function showPairCode(code: string, expires: number) {
 
 function closePairCode() {
   clearInterval(pairTimer);
+  $('pair-confirm').hidden = true;
   $('pair-code-box').hidden = true;
   $('pair-show').hidden = false;
 }
+
+$('pair-accept').addEventListener('click', () => {
+  if (!signaling.send({ t: 'pair-reply', ok: true })) toast('Sin conexión con el servidor. Probá de nuevo en un momento.');
+});
+
+$('pair-reject').addEventListener('click', () => {
+  signaling.send({ t: 'pair-reply', ok: false });
+  closePairCode();
+});
 
 $<HTMLDialogElement>('pair-dlg').addEventListener('close', () => {
   if (!$('pair-code-box').hidden) signaling.send({ t: 'pair-cancel' });
@@ -801,6 +831,7 @@ $<HTMLFormElement>('pair-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const code = $<HTMLInputElement>('pair-input').value.replace(/\D/g, '');
   $('pair-error').hidden = true;
+  $('pair-wait').hidden = true;
   if (code.length !== 6) {
     $('pair-error').textContent = 'El código tiene 6 números.';
     $('pair-error').hidden = false;
@@ -1020,7 +1051,7 @@ function showBanner() {
   const local = ['localhost', '127.0.0.1'].includes(location.hostname);
   if (!isSecureContext && !local) {
     const b = $('banner');
-    b.textContent = 'Estás usando Pasalo sin https. Podés pasar archivos, pero no instalarla, y lo que recibas se guarda en memoria.';
+    b.textContent = 'Estás usando Pasalo sin https: cualquiera en tu wifi podría ver lo que pasa por el servidor. Usá la dirección de Tailscale. Así tampoco se puede instalar, y lo que recibas se guarda en memoria.';
     b.hidden = false;
   }
 }

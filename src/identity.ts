@@ -15,6 +15,9 @@ export interface HiddenDevice {
 }
 
 export interface Identity {
+  /** Lo que prueba quién sos ante el servidor. Nunca se muestra ni sale de acá hacia otros dispositivos. */
+  secret: string;
+  /** El id público: lo calcula el servidor a partir del secreto y lo manda al conectar. */
   id: string;
   name: string;
   kind: DeviceKind;
@@ -35,9 +38,9 @@ function read(): Partial<Identity> {
 export function loadIdentity(): Identity {
   const saved = read();
   const kind = detectKind();
-  const id = typeof saved.id === 'string' && /^[a-f0-9]{32}$/.test(saved.id) ? saved.id : randomHex(16);
   const me: Identity = {
-    id,
+    secret: typeof saved.secret === 'string' && /^[a-f0-9]{32}$/.test(saved.secret) ? saved.secret : randomHex(16),
+    id: typeof saved.id === 'string' ? saved.id : '',
     kind,
     name: saved.name || defaultName(kind),
     pairs: Array.isArray(saved.pairs) ? saved.pairs : [],

@@ -85,6 +85,7 @@ interface Incoming {
   chain: Promise<unknown>;
   written: number;
   lastAck: number;
+  nextFile: number;
 }
 
 export class TransferManager extends EventTarget {
@@ -101,7 +102,7 @@ export class TransferManager extends EventTarget {
   private speedTimer = 0;
 
   constructor(
-    private myId: string,
+    private myId: () => string,
     private signaling: Signaling,
     private iceServers: () => RTCIceServer[],
     private peerName: (id: string) => string,
@@ -123,7 +124,7 @@ export class TransferManager extends EventTarget {
   private rtc(peerId: string): PeerLink {
     let l = this.rtcs.get(peerId);
     if (l && l.state !== 'closed') return l;
-    const link = new PeerLink(peerId, this.myId > peerId, this.iceServers(), (data) =>
+    const link = new PeerLink(peerId, this.myId() > peerId, this.iceServers(), (data) =>
       this.signaling.send({ t: 'signal', to: peerId, data }),
     );
     link.addEventListener('message', (e) => this.onData(peerId, (e as MessageEvent).data, link));
@@ -369,6 +370,13 @@ export class TransferManager extends EventTarget {
     if (typeof data !== 'string') {
       const inc = this.currentIn.get(peerId);
       if (!inc?.sink) return;
+      // Aceptaste un tamaño: nadie te puede llenar el disco mandando más.
+      if (inc.t.bytes + data.byteLength > inc.t.total) {
+        this.fail(inc.t, 'El otro dispositivo mandó más de lo que dijo. Corté la transferencia.');
+        this.trySend(via, { t: 'cancel', id: inc.t.id });
+        this.abortIn(inc);
+        return;
+      }
       inc.sink.write(data);
       inc.t.bytes += data.byteLength;
       this.progress(inc.t);
@@ -383,19 +391,22 @@ export class TransferManager extends EventTarget {
     const l = via;
     switch (m.t) {
       case 'offer': {
-        if (this.transfers.has(m.id) || !Array.isArray(m.files)) return;
+        // El id termina siendo el nombre de una carpeta en disco: elegirlo a mano pisaría otro recibido.
+        if (this.transfers.has(m.id) || !/^[a-f0-9]{16}$/.test(String(m.id)) || !Array.isArray(m.files)) return;
         const files = m.files.slice(0, 5000).map((f) => ({
-          name: String(f.name).replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').slice(0, 200) || 'archivo',
-          size: Math.max(0, Number(f.size) || 0),
+          // También saca los caracteres que dan vuelta el texto: "foto‮gpj.exe" se leería como foto.jpg.
+          name: String(f.name).replace(/[\\/:*?"<>|\u0000-\u001f\u007f-\u009f‎‏‪-‮⁦-⁩]/g, '_').slice(0, 200) || 'archivo',
+          size: Number(f.size),
           type: String(f.type || 'application/octet-stream').slice(0, 100),
         }));
+        if (!files.every((f) => Number.isSafeInteger(f.size) && f.size >= 0)) return;
         const t: Transfer = {
           id: m.id, peerId, peerName: this.peerName(peerId), direction: 'in', files,
           total: files.reduce((s, f) => s + f.size, 0), bytes: 0, index: 0,
           status: 'pending', route: via.via, speed: 0, startedAt: Date.now(),
         };
         this.transfers.set(t.id, t);
-        this.incoming.set(t.id, { t, link: via, sink: null, sinks: [], chain: Promise.resolve(), written: 0, lastAck: 0 });
+        this.incoming.set(t.id, { t, link: via, sink: null, sinks: [], chain: Promise.resolve(), written: 0, lastAck: 0, nextFile: 0 });
         this.changed(t);
         this.dispatchEvent(new CustomEvent('request', { detail: t }));
         break;
@@ -440,9 +451,11 @@ export class TransferManager extends EventTarget {
       }
       case 'file': {
         const inc = this.incoming.get(m.id);
-        if (!inc || inc.t.peerId !== peerId || inc.t.status !== 'active') return;
+        if (!inc || inc.t.peerId !== peerId || inc.t.status !== 'active' || inc.sink) return;
+        // De a uno y en orden: con cualquier otro valor, "index" podría leer otra cosa que un archivo.
+        if (m.index !== inc.nextFile || m.index >= inc.t.files.length) return;
+        inc.nextFile++;
         const meta = inc.t.files[m.index];
-        if (!meta) return;
         inc.t.index = m.index;
         this.currentIn.set(peerId, inc);
         // Creamos el destino de forma asíncrona pero encolamos los trozos que lleguen mientras tanto.

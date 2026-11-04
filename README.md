@@ -108,6 +108,10 @@ flowchart LR
 - **Los archivos no se guardan en ningún servidor.** Van de un dispositivo al otro, y lo recibido queda solo en el dispositivo que lo recibió.
 - **Quién te ve:** solo los dispositivos que llegan a tu servidor (tu wifi o tu red de Tailscale) y los que vinculaste con
   un código. Nadie puede mandarte un archivo sin que lo aceptes.
+- **Lo que recibís no corre dentro de la app.** Un HTML o un SVG solo se descarga; no se puede abrir desde Pasalo aunque
+  venga disfrazado de foto o de texto.
+- **Nadie puede hacerse pasar por tu dispositivo:** cada uno tiene un secreto que nunca sale hacia los demás. El servidor
+  solo atiende a la propia app, no a otros sitios web.
 - **Google Drive:** Pasalo pide el permiso `drive.file`, que solo deja ver y tocar **los archivos que subió Pasalo**,
   nunca el resto de tu Drive. El permiso queda guardado solo en tu navegador, dura una hora y lo podés sacar en cualquier
   momento desde Ajustes o desde [tu cuenta de Google](https://myaccount.google.com/permissions).
@@ -147,11 +151,15 @@ Abrí `http://localhost:3000`.
 
 ### Por la wifi de casa
 
-Con el celular en la misma wifi que la compu, abrí la dirección que muestra la compu al arrancar
+Sin Tailscale, con el celular en la misma wifi que la compu, abrí la dirección que muestra la compu al arrancar
 (algo como `http://192.168.1.20:3000`). Ya podés pasar archivos.
 
-Por `http` los navegadores no dejan **instalar** la app ni **guardar a disco** (lo recibido va a memoria, bien para fotos
-y documentos). Para eso hace falta `https`:
+**Ojo:** por `http` nada va cifrado hasta el servidor, y cualquiera conectado a tu wifi puede entrar. Por eso, cuando
+Tailscale publica Pasalo, el servidor deja de escuchar en la wifi y se entra solo por Tailscale. Si aun así la querés
+abierta, poné `HOST=0.0.0.0` en `.env`.
+
+Además, por `http` los navegadores no dejan **instalar** la app ni **guardar a disco** (lo recibido va a memoria, bien para
+fotos y documentos). Para todo eso hace falta `https`:
 
 ### Con https y desde cualquier lado: Tailscale (recomendado)
 
@@ -180,8 +188,8 @@ panel (menú de la compu → **Share**). Así llegan a Pasalo y a nada más de t
 ## Vincular dispositivos de otras redes
 
 Los dispositivos de tu wifi aparecen solos. Para uno que está en otra red pero llega a tu servidor (por ejemplo, por
-Tailscale desde otra casa): **Vincular con un código** en los dos. Uno muestra un código de 6 números (dura 5 minutos)
-y el otro lo escribe. Se hace una sola vez.
+Tailscale desde otra casa): **Vincular con un código** en los dos. Uno muestra un código de 6 números (dura 5 minutos),
+el otro lo escribe y el primero confirma quién entra. Se hace una sola vez.
 
 ## Tu nube (Google Drive)
 
@@ -225,9 +233,10 @@ Variables de entorno, o un archivo `.env` en la carpeta del proyecto (una por l�
 | Variable | Default | Para qué |
 |---|---|---|
 | `PORT` | `3000` | Puerto |
-| `HOST` | `0.0.0.0` | Interfaz donde escucha |
+| `HOST` | automático | Interfaz donde escucha: `127.0.0.1` si Tailscale publica Pasalo; si no, `0.0.0.0` |
 | `GOOGLE_CLIENT_ID` | vacío | Activa "Tu nube" (ver arriba) |
 | `TRUST_PROXY` | apagado | `1` para confiar en `X-Forwarded-For` de un proxy en otra máquina |
+| `ALLOWED_HOSTS` | vacío | Nombres propios desde los que se abre la app, separados por coma. Hace falta si usás un dominio: `localhost`, las IP y `*.ts.net` ya andan |
 | `STUN_URLS` | Google y Cloudflare | Servidores STUN, separados por coma |
 | `TURN_URL`, `TURN_USERNAME`, `TURN_CREDENTIAL` | vacío | Servidor TURN opcional, para redes que bloquean la conexión directa |
 | `SSL_CERT`, `SSL_KEY` | vacío | Rutas a un certificado para servir `https` directo |
@@ -249,6 +258,7 @@ El servidor anota lo que pasa en la ventana negra (y en `servidor.log` si usás 
 | Ves | Qué significa | Qué hacer |
 |---|---|---|
 | No aparece nada al abrir la página | El pedido no llega a la compu | Fijate que estén en la misma wifi (no la de invitados) o que Tailscale esté conectado. En iPhone con Chrome o Brave, activá **Red local** en Ajustes → la app |
+| Dejó de abrir `http://192.168...` | Con Tailscale publicando Pasalo, la wifi queda cerrada | Usá la dirección `https` de Tailscale, o poné `HOST=0.0.0.0` en `.env` |
 | `[pidió https]` | El navegador intentó `https://` en la dirección de la wifi | Escribí la dirección con `http://` adelante, o usá la de Tailscale |
 | `[conexión directa falló]` | La conexión directa no se armó y se usó el puente por el servidor | Anda igual, un poco más lento. Si pasa siempre, revisá el firewall de Windows |
 | La dirección `https` no carga | Tailscale no está conectado | Abrí la app de Tailscale en la compu y fijate que diga *Connected* |

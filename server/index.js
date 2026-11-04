@@ -8,6 +8,7 @@
 import http from 'node:http';
 import https from 'node:https';
 import fs from 'node:fs';
+import net from 'node:net';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
@@ -21,8 +22,9 @@ try { process.loadEnvFile(path.join(ROOT, '.env')); } catch { /* no hay .env */ 
 const DIST = path.join(ROOT, 'dist');
 const DEV = process.argv.includes('--dev');
 const PORT = Number(process.env.PORT || 3000);
-const HOST = process.env.HOST || '0.0.0.0';
 const TRUST_PROXY = process.env.TRUST_PROXY === '1';
+const MAX_CLIENTS = 100;
+const MAX_RELAY_BACKLOG = 64 << 20; // el emisor espera acks cada 16 MB: pasar esto es abuso, no un receptor lento
 
 // ---------------------------------------------------------------- ICE config
 
@@ -59,6 +61,21 @@ const SECURITY_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
   'Referrer-Policy': 'no-referrer',
   'X-Frame-Options': 'DENY',
+  // Los recibidos se abren como blob: y heredan esta política, así que tampoco corren scripts ahí adentro.
+  'Content-Security-Policy': [
+    "default-src 'self'",
+    "script-src 'self' https://accounts.google.com/gsi/client",
+    "style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style",
+    "img-src 'self' blob: data:",
+    "media-src 'self' blob:",
+    "font-src 'self' data:",
+    "connect-src 'self' https://accounts.google.com/gsi/ https://www.googleapis.com https://oauth2.googleapis.com",
+    'frame-src https://accounts.google.com/gsi/',
+    "object-src 'none'",
+    "base-uri 'none'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+  ].join('; '),
 };
 
 function sendFile(res, file, cacheControl) {
@@ -68,13 +85,14 @@ function sendFile(res, file, cacheControl) {
     'Content-Type': MIME[ext] || 'application/octet-stream',
     'Cache-Control': cacheControl,
   });
-  fs.createReadStream(file).pipe(res);
+  fs.createReadStream(file).on('error', () => res.destroy()).pipe(res);
 }
 
 function serveStatic(req, res) {
   let urlPath;
   try {
     urlPath = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+    if (urlPath.includes('\0')) throw new Error('ruta con NUL'); // fs.stat tira con esto, sin pasar por el callback
   } catch {
     res.writeHead(400).end();
     return;
@@ -118,6 +136,35 @@ function canAutostart(req) {
   // Direcciones de ahora: Tailscale puede conectarse después de que arrancó el servidor.
   const mine = Object.values(os.networkInterfaces()).flat().map((a) => a?.address.replace(/^::ffff:/, ''));
   return mine.includes(String(fwd).trim().replace(/^::ffff:/, ''));
+}
+
+const ALLOWED_HOSTS = (process.env.ALLOWED_HOSTS || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+
+/** Contra DNS rebinding: una IP escrita no se puede apuntar a otro lado, un nombre cualquiera sí. */
+function hostAllowed(host) {
+  let name;
+  try {
+    name = new URL(`http://${host}`).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  return name === 'localhost' || name.endsWith('.ts.net') || net.isIP(name.replace(/^\[|\]$/g, '')) > 0 || ALLOWED_HOSTS.includes(name);
+}
+
+/**
+ * El WebSocket solo atiende a páginas de esta misma app: sin esto, cualquier sitio abierto en un
+ * dispositivo de la casa podría entrar. El navegador manda Origin y la página no lo puede cambiar.
+ */
+function fromOwnPage(req) {
+  let origin;
+  try {
+    origin = new URL(req.headers.origin);
+  } catch {
+    return false;
+  }
+  // tailscale serve reenvía desde loopback y avisa el nombre original en X-Forwarded-Host.
+  const viaProxy = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress) && req.headers['x-forwarded-host'];
+  return (origin.host === req.headers.host || origin.host === viaProxy) && hostAllowed(origin.host);
 }
 
 function handleApi(req, res) {
@@ -170,8 +217,24 @@ function handleApi(req, res) {
 const clients = new Map();
 /** @type {Map<string, Set<string>>} room -> client ids */
 const rooms = new Map();
-/** @type {Map<string, { creator: string, expires: number }>} */
+/** @type {Map<string, { creator: string, expires: number, joiner?: string }>} */
 const pairCodes = new Map();
+// Un solo contador para todos: cambiar de conexión o de IP no da más intentos de adivinar un código.
+const PAIR_MAX_FAILS = 20;
+const PAIR_WINDOW = 5 * 60_000;
+let pairFails = 0;
+let pairFailsReset = 0;
+
+/** Borra un código y, si alguien esperaba la confirmación, le avisa. */
+function dropPairCode(code, reason = 'Ese código ya no sirve. Generá uno nuevo en el otro dispositivo.') {
+  const joiner = clients.get(pairCodes.get(code)?.joiner);
+  pairCodes.delete(code);
+  if (joiner) send(joiner, { t: 'pair-error', reason });
+}
+
+function dropPairCodesOf(client) {
+  for (const [code, p] of pairCodes) if (p.creator === client.id) dropPairCode(code);
+}
 
 function isPrivateIp(ip) {
   return (
@@ -239,7 +302,10 @@ function sendPeers(client) {
   const peers = [];
   for (const [id, via] of visiblePeers(client)) {
     const p = clients.get(id);
-    if (p) peers.push({ id, name: p.name, kind: p.kind, via: [...via] });
+    if (!p) continue;
+    // Con la clave en común, cada vinculado se reconoce aunque su id haya cambiado.
+    const keys = [...client.rooms].filter((r) => r.startsWith('pair:') && p.rooms.has(r)).map((r) => r.slice(5));
+    peers.push({ id, name: p.name, kind: p.kind, via: [...via], keys });
   }
   send(client, { t: 'peers', peers });
 }
@@ -260,9 +326,11 @@ function newPairCode() {
   throw new Error('sin códigos libres');
 }
 
-const clean = (s, max) => String(s ?? '').replace(/[\u0000-\u001f]/g, '').trim().slice(0, max);
+// Todo lo de abajo viene de la red: un objeto con trampa en lugar de un texto tira error al convertirlo.
+// Además de controles, saca los caracteres que dan vuelta el texto ("gpj.exe" que se lee al revés).
+const clean = (s, max) => (typeof s === 'string' ? s.replace(/[\u0000-\u001f\u007f-\u009f‎‏‪-‮⁦-⁩]/g, '').trim().slice(0, max) : '');
 const KINDS = new Set(['phone', 'tablet', 'desktop']);
-const ID_RE = /^[a-f0-9]{16,64}$/;
+const isId = (s) => typeof s === 'string' && /^[a-f0-9]{32,64}$/.test(s);
 
 function onMessage(client, raw, req) {
   let msg;
@@ -274,21 +342,23 @@ function onMessage(client, raw, req) {
   if (!msg || typeof msg.t !== 'string') return;
 
   if (msg.t === 'hello') {
-    if (client.id || !ID_RE.test(msg.id || '')) return;
+    if (client.id || !isId(msg.secret)) return;
+    // El id lo ven todos en la lista; el secreto del que sale, nadie. Así nadie puede hacerse pasar por otro.
+    const id = crypto.createHash('sha256').update(msg.secret).digest('hex').slice(0, 32);
     // Si el mismo dispositivo tenía otra pestaña/conexión, la reemplazamos.
-    const prev = clients.get(msg.id);
+    const prev = clients.get(id);
     if (prev) {
       leaveAll(prev);
       prev.ws.close(4000, 'reemplazado');
-      clients.delete(msg.id);
+      clients.delete(id);
     }
-    client.id = msg.id;
+    client.id = id;
     client.name = clean(msg.name, 40) || 'Dispositivo';
     client.kind = KINDS.has(msg.kind) ? msg.kind : 'desktop';
     clients.set(client.id, client);
     join(client, networkRoom(clientIp(req)));
     for (const key of Array.isArray(msg.pairs) ? msg.pairs.slice(0, 50) : []) {
-      if (ID_RE.test(key)) join(client, 'pair:' + key);
+      if (isId(key)) join(client, 'pair:' + key);
     }
     send(client, { t: 'welcome', id: client.id });
     log(`[conectado] ${client.name} (${clientIp(req)})`);
@@ -311,7 +381,7 @@ function onMessage(client, raw, req) {
       break;
     }
     case 'pair-create': {
-      for (const [code, p] of pairCodes) if (p.creator === client.id) pairCodes.delete(code);
+      dropPairCodesOf(client);
       const code = newPairCode();
       const expires = Date.now() + 5 * 60_000;
       pairCodes.set(code, { creator: client.id, expires });
@@ -319,40 +389,70 @@ function onMessage(client, raw, req) {
       break;
     }
     case 'pair-join': {
+      const now = Date.now();
+      if (now > pairFailsReset) {
+        pairFails = 0;
+        pairFailsReset = now + PAIR_WINDOW;
+      }
+      if (pairFails >= PAIR_MAX_FAILS) {
+        send(client, { t: 'pair-error', reason: 'Demasiados intentos fallidos. Esperá unos minutos y generá un código nuevo.' });
+        return;
+      }
       const code = clean(msg.code, 6);
       const entry = pairCodes.get(code);
       const creator = entry && clients.get(entry.creator);
-      if (!entry || entry.expires < Date.now() || !creator || creator.id === client.id) {
+      if (!entry || entry.joiner || entry.expires < now || !creator || creator.id === client.id) {
+        if (++pairFails === PAIR_MAX_FAILS) for (const c of [...pairCodes.keys()]) dropPairCode(c);
         send(client, { t: 'pair-error', reason: 'Ese código no existe o ya venció. Generá uno nuevo en el otro dispositivo.' });
         return;
       }
+      // Acertar el código no alcanza: el que lo generó tiene que confirmar quién entra.
+      entry.joiner = client.id;
+      send(client, { t: 'pair-wait' });
+      send(creator, { t: 'pair-request', name: client.name });
+      break;
+    }
+    case 'pair-reply': {
+      const found = [...pairCodes].find(([, p]) => p.creator === client.id && p.joiner);
+      if (!found) return;
+      const [code, entry] = found;
+      if (msg.ok !== true) {
+        dropPairCode(code, 'El otro dispositivo rechazó la vinculación.');
+        return;
+      }
+      const joiner = clients.get(entry.joiner);
       pairCodes.delete(code);
+      if (!joiner) {
+        send(client, { t: 'pair-error', reason: 'El otro dispositivo se desconectó. Generá un código nuevo.' });
+        return;
+      }
       const key = crypto.randomBytes(16).toString('hex');
-      join(creator, 'pair:' + key);
       join(client, 'pair:' + key);
-      send(creator, { t: 'paired', key, peer: { id: client.id, name: client.name, kind: client.kind } });
-      send(client, { t: 'paired', key, peer: { id: creator.id, name: creator.name, kind: creator.kind } });
-      refreshAround(creator);
+      join(joiner, 'pair:' + key);
+      send(client, { t: 'paired', key, peer: { id: joiner.id, name: joiner.name, kind: joiner.kind } });
+      send(joiner, { t: 'paired', key, peer: { id: client.id, name: client.name, kind: client.kind } });
       refreshAround(client);
+      refreshAround(joiner);
       break;
     }
     case 'pair-cancel': {
-      for (const [code, p] of pairCodes) if (p.creator === client.id) pairCodes.delete(code);
+      dropPairCodesOf(client);
       break;
     }
     case 'relay': {
       const target = clients.get(msg.to);
       if (!target || !canSee(client, target) || typeof msg.data !== 'string') return;
+      if (target.ws.bufferedAmount > MAX_RELAY_BACKLOG) return client.ws.terminate();
       send(target, { t: 'relay', from: client.id, data: msg.data });
       break;
     }
     case 'diag': {
       const target = clients.get(msg.to);
-      log(`[conexión directa falló] ${client.name} → ${target?.name ?? msg.to}. Uso el servidor como puente. ${JSON.stringify(msg.info).slice(0, 600)}`);
+      log(`[conexión directa falló] ${client.name} → ${target?.name ?? '(no está)'}. Uso el servidor como puente. ${JSON.stringify(msg.info ?? null).slice(0, 600)}`);
       break;
     }
     case 'unpair': {
-      if (!ID_RE.test(msg.key || '')) return;
+      if (!isId(msg.key)) return;
       const room = 'pair:' + msg.key;
       const before = visiblePeers(client);
       client.rooms.delete(room);
@@ -386,11 +486,22 @@ function relayBinary(client, data) {
   if (!client.id || !Buffer.isBuffer(data) || data.length < 16) return;
   const target = clients.get(data.subarray(0, 16).toString('hex'));
   if (!target || !canSee(client, target) || target.ws.readyState !== 1) return;
+  if (target.ws.bufferedAmount > MAX_RELAY_BACKLOG) return client.ws.terminate();
   Buffer.from(client.id, 'hex').copy(data, 0);
   target.ws.send(data, { binary: true });
 }
 
-const log = (line) => console.log(`${new Date().toLocaleTimeString('es-AR', { hour12: false })} ${line}`);
+// Con tope por minuto: servidor.log se acumula, y nadie tiene que poder llenar el disco a pedidos.
+let logged = 0;
+let logReset = 0;
+function log(line) {
+  const now = Date.now();
+  if (now > logReset) {
+    logged = 0;
+    logReset = now + 60_000;
+  }
+  if (++logged <= 120) console.log(`${new Date().toLocaleTimeString('es-AR', { hour12: false })} ${line}`);
+}
 
 function shortAgent(ua = '') {
   const device = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? (/Mobile/.test(ua) ? 'Android' : 'Tablet Android') : /Windows/.test(ua) ? 'Windows' : /Mac/.test(ua) ? 'Mac' : /Linux/.test(ua) ? 'Linux o tablet Android en modo escritorio' : 'otro';
@@ -410,7 +521,17 @@ async function main() {
   let vite = null;
   const handler = (req, res) => {
     const remote = (req.socket.remoteAddress || '').replace(/^::ffff:/, '');
-    const { pathname } = new URL(req.url, 'http://x');
+    if (!DEV && !hostAllowed(req.headers.host)) {
+      res.writeHead(403, SECURITY_HEADERS).end();
+      return;
+    }
+    let pathname;
+    try {
+      ({ pathname } = new URL(req.url, 'http://x'));
+    } catch {
+      res.writeHead(400, SECURITY_HEADERS).end();
+      return;
+    }
     const isPage = req.method === 'GET' && !path.extname(pathname) && pathname !== '/ws';
     if (isPage) {
       const host = String(req.headers.host || '').replace(/:\d+$/, '');
@@ -453,7 +574,20 @@ async function main() {
   const owners = new WeakMap();
   const wss = new WebSocketServer({ noServer: true, maxPayload: 256 * 1024 });
   server.on('upgrade', (req, socket, head) => {
-    if (new URL(req.url, 'http://x').pathname !== '/ws') return; // otros upgrades (HMR de Vite)
+    socket.on('error', () => {});
+    if (req.url !== '/ws') {
+      if (!DEV) socket.destroy(); // en desarrollo son los de HMR de Vite
+      return;
+    }
+    if (!fromOwnPage(req)) {
+      log(`[conexión rechazada] ${clientIp(req)}: página ajena (${req.headers.origin ?? 'sin origen'})`);
+      socket.end('HTTP/1.1 403 Forbidden\r\n\r\n');
+      return;
+    }
+    if (wss.clients.size >= MAX_CLIENTS) {
+      socket.end('HTTP/1.1 503 Service Unavailable\r\n\r\n');
+      return;
+    }
     wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
   });
 
@@ -461,6 +595,7 @@ async function main() {
     /** @type {Client} */
     const client = { id: '', name: '', kind: 'desktop', rooms: new Set(), ws, alive: true };
     owners.set(ws, client);
+    ws.on('error', () => ws.terminate()); // sin esto, un frame inválido o gigante tira todo el proceso
     ws.on('pong', () => (client.alive = true));
     ws.on('message', (data, isBinary) => {
       if (!isBinary) onMessage(client, data.toString(), req);
@@ -471,8 +606,8 @@ async function main() {
       log(`[desconectado] ${client.name}`);
       const neighbours = [...visiblePeers(client).keys()];
       leaveAll(client);
+      dropPairCodesOf(client);
       clients.delete(client.id);
-      for (const [code, p] of pairCodes) if (p.creator === client.id) pairCodes.delete(code);
       for (const id of neighbours) {
         const c = clients.get(id);
         if (c) sendPeers(c);
@@ -491,22 +626,24 @@ async function main() {
       ws.ping();
     }
     const now = Date.now();
-    for (const [code, p] of pairCodes) if (p.expires < now) pairCodes.delete(code);
+    for (const [code, p] of pairCodes) if (p.expires < now) dropPairCode(code);
   }, 25_000).unref();
 
-  server.listen(PORT, HOST, () => {
+  const ts = await tailscaleHttps();
+  // Por la wifi todo viajaría sin cifrar y entraría cualquiera conectado: con Tailscale publicando Pasalo no hace falta.
+  const host = process.env.HOST || (ts?.serving ? '127.0.0.1' : '0.0.0.0');
+  server.listen(PORT, host, () => {
     const proto = useTls ? 'https' : 'http';
     console.log(`\n${new Date().toLocaleString('es-AR', { hour12: false })}: Pasalo ${DEV ? '(desarrollo) ' : ''}escuchando en ${proto}://localhost:${PORT}`);
-    const lan = lanAddresses();
+    const lan = host === '0.0.0.0' ? lanAddresses() : [];
     if (lan.length) {
       console.log('\nDesde el celular o la tablet (misma wifi), abrí:');
       for (const ip of lan) console.log(`   ${proto}://${ip}:${PORT}`);
+      if (!useTls) console.log('\nOjo: por la wifi todo viaja sin cifrar y cualquiera conectado a ella puede entrar. Usá Tailscale.');
       console.log('');
     }
-    tailscaleHttps().then((ts) => {
-      if (ts?.serving) console.log(`Con https (para instalarla y guardar en disco), abrí:\n   ${ts.url}\n`);
-      else if (ts) console.log(`Tailscale está listo pero no publica Pasalo. Corré una vez:\n   tailscale serve --bg ${PORT}\n`);
-    });
+    if (ts?.serving) console.log(`Con https, desde tus dispositivos con Tailscale, abrí:\n   ${ts.url}\n`);
+    else if (ts) console.log(`Tailscale está listo pero no publica Pasalo. Corré una vez:\n   tailscale serve --bg ${PORT}\n`);
   });
 }
 
@@ -527,12 +664,17 @@ function tailscaleHttps() {
   const run = (args) => new Promise((resolve) => execFile(bin, args, { timeout: 3000 }, (err, out) => resolve(err ? '' : out)));
   return Promise.all([run(['status', '--json']), run(['serve', 'status', '--json'])]).then(([status, serve]) => {
     try {
-      const host = JSON.parse(status).Self?.DNSName?.replace(/\.$/, '');
-      return host ? { url: `https://${host}`, serving: serve.includes(`:${PORT}"`) } : null;
+      const { Self, BackendState } = JSON.parse(status);
+      const host = Self?.DNSName?.replace(/\.$/, '');
+      // "serve" queda guardado aunque Tailscale esté apagado: sin conexión, la wifi es la única entrada.
+      return host && BackendState === 'Running' ? { url: `https://${host}`, serving: serve.includes(`:${PORT}"`) } : null;
     } catch {
       return null;
     }
   });
 }
+
+// Red de seguridad: que un error sin prever deje constancia, pero no apague Pasalo para toda la casa.
+process.on('uncaughtException', (err) => log(`[error] ${err.stack}`));
 
 main();
