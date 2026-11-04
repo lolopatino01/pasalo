@@ -78,7 +78,8 @@ tests/e2e.mjs      Playwright: dos navegadores, 300 MB con SHA-256, rechazar, ca
 - Manual: `npm install && npm run build && npm start` → http://localhost:3000. Desarrollo: `npm run dev`.
 - GitHub Actions (`.github/workflows/ci.yml`) corre check, build y el e2e (directo y RELAY=1, SIZE_MB=100) en cada push
   a main; la insignia está en los dos README (README.md en español, README.en.md en inglés: mantener los dos).
-- Versiones: v1.0.0 publicada como Release en GitHub (26/10/2026).
+- Versiones: Releases en GitHub con Pasalo-windows.zip (v1.0.0 26/10/2026, v1.1.0 4/11/2026). El zip se arma desde `git archive HEAD`
+  en una carpeta limpia: `npm ci`, build, se copian dist, server, package*.json, los .bat y LICENSE, `npm ci --omit=dev` y LEEME.txt.
 - Pruebas: `GOOGLE_CLIENT_ID= PORT=3100 npm start` (sin el ID real del `.env`) y `npm run test:e2e` (necesita Playwright). `RELAY=1` fuerza el puente por el servidor.
 
 ## Estado (26/10/2026)
