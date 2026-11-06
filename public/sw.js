@@ -22,7 +22,10 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== location.origin) return;
 
   if (req.method === 'POST' && url.pathname === '/compartir') {
-    event.respondWith(receiveShare(req));
+    // Compartir llega de Android, sin página de origen. shortcut: una página que oculte su referrer pasa,
+    // pero solo deja algo pendiente: igual hay que elegir a quién mandárselo.
+    const from = /^https?:/.test(req.referrer) ? new URL(req.referrer).origin : location.origin;
+    event.respondWith(from === location.origin ? receiveShare(req) : Response.redirect('/', 303));
     return;
   }
   if (req.method !== 'GET') return;

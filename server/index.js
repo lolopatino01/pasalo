@@ -24,6 +24,7 @@ const DEV = process.argv.includes('--dev');
 const PORT = Number(process.env.PORT || 3000);
 const TRUST_PROXY = process.env.TRUST_PROXY === '1';
 const MAX_CLIENTS = 100;
+const MAX_PER_IP = 20; // uno solo no puede ocupar todos los lugares
 const MAX_RELAY_BACKLOG = 64 << 20; // el emisor espera acks cada 16 MB: pasar esto es abuso, no un receptor lento
 
 // ---------------------------------------------------------------- ICE config
@@ -211,7 +212,7 @@ function handleApi(req, res) {
 
 // ---------------------------------------------------------------- Rooms
 
-/** @typedef {{ id: string, name: string, kind: string, rooms: Set<string>, ws: import('ws').WebSocket, alive: boolean }} Client */
+/** @typedef {{ id: string, ip: string, name: string, kind: string, rooms: Set<string>, ws: import('ws').WebSocket, alive: boolean }} Client */
 
 /** @type {Map<string, Client>} */
 const clients = new Map();
@@ -221,9 +222,11 @@ const rooms = new Map();
 const pairCodes = new Map();
 // Un solo contador para todos: cambiar de conexión o de IP no da más intentos de adivinar un código.
 const PAIR_MAX_FAILS = 20;
+const PAIR_MAX_FAILS_IP = 10; // uno solo no llega al tope de todos: no puede trabarles el vincular a los demás
 const PAIR_WINDOW = 5 * 60_000;
 let pairFails = 0;
 let pairFailsReset = 0;
+const pairFailsByIp = new Map();
 
 /** Borra un código y, si alguien esperaba la confirmación, le avisa. */
 function dropPairCode(code, reason = 'Ese código ya no sirve. Generá uno nuevo en el otro dispositivo.') {
@@ -392,9 +395,10 @@ function onMessage(client, raw, req) {
       const now = Date.now();
       if (now > pairFailsReset) {
         pairFails = 0;
+        pairFailsByIp.clear();
         pairFailsReset = now + PAIR_WINDOW;
       }
-      if (pairFails >= PAIR_MAX_FAILS) {
+      if (pairFails >= PAIR_MAX_FAILS || (pairFailsByIp.get(client.ip) ?? 0) >= PAIR_MAX_FAILS_IP) {
         send(client, { t: 'pair-error', reason: 'Demasiados intentos fallidos. Esperá unos minutos y generá un código nuevo.' });
         return;
       }
@@ -402,6 +406,7 @@ function onMessage(client, raw, req) {
       const entry = pairCodes.get(code);
       const creator = entry && clients.get(entry.creator);
       if (!entry || entry.joiner || entry.expires < now || !creator || creator.id === client.id) {
+        pairFailsByIp.set(client.ip, (pairFailsByIp.get(client.ip) ?? 0) + 1);
         if (++pairFails === PAIR_MAX_FAILS) for (const c of [...pairCodes.keys()]) dropPairCode(c);
         send(client, { t: 'pair-error', reason: 'Ese código no existe o ya venció. Generá uno nuevo en el otro dispositivo.' });
         return;
@@ -457,6 +462,7 @@ function onMessage(client, raw, req) {
       const before = visiblePeers(client);
       client.rooms.delete(room);
       rooms.get(room)?.delete(client.id);
+      if (!rooms.get(room)?.size) rooms.delete(room);
       sendPeers(client);
       for (const id of before.keys()) {
         const c = clients.get(id);
@@ -584,7 +590,8 @@ async function main() {
       socket.end('HTTP/1.1 403 Forbidden\r\n\r\n');
       return;
     }
-    if (wss.clients.size >= MAX_CLIENTS) {
+    const ip = clientIp(req);
+    if (wss.clients.size >= MAX_CLIENTS || [...wss.clients].filter((w) => owners.get(w)?.ip === ip).length >= MAX_PER_IP) {
       socket.end('HTTP/1.1 503 Service Unavailable\r\n\r\n');
       return;
     }
@@ -593,7 +600,7 @@ async function main() {
 
   wss.on('connection', (ws, req) => {
     /** @type {Client} */
-    const client = { id: '', name: '', kind: 'desktop', rooms: new Set(), ws, alive: true };
+    const client = { id: '', ip: clientIp(req), name: '', kind: 'desktop', rooms: new Set(), ws, alive: true };
     owners.set(ws, client);
     ws.on('error', () => ws.terminate()); // sin esto, un frame inválido o gigante tira todo el proceso
     ws.on('pong', () => (client.alive = true));

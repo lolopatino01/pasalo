@@ -11,7 +11,7 @@
 //                               ← {t:received, id}
 //  {t:cancel, id}             ↔  (cualquiera de los dos, en cualquier momento)
 //
-//  Texto o link, sin pedir permiso:
+//  Texto o link (el que recibe decide en la interfaz si lo ve; el emisor no espera):
 //  {t:text, id, text}          →
 //                               ← {t:received, id}
 //

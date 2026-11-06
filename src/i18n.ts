@@ -151,6 +151,9 @@ const EN: Record<string, string> = {
   '{name} canceló la transferencia.': '{name} canceled the transfer.',
   'Listo, "{name}" está en Recibidos.': 'Done, "{name}" is in Received.',
   '{name} te pasó un texto': '{name} sent you a text',
+  '{name} te quiere pasar un texto': '{name} wants to send you a text',
+  'Si no lo esperabas, rechazalo.': "If you weren't expecting it, decline it.",
+  'Ver texto': 'View text',
   'Primero conectá tu Drive tocando "Tu nube", y después volvé a elegir los archivos.':
     'First connect your Drive by tapping "Your cloud", then choose the files again.',
   'Ese dispositivo no está conectado ahora.': 'That device is not connected right now.',

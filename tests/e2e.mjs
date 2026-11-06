@@ -253,8 +253,11 @@ await A.screenshot({ path: `${SHOTS}/9-pc-que-pasar.png` });
 await A.click('#send-text');
 await A.fill('#text-input', 'Mirá esta receta: https://example.com/receta?id=1');
 await A.click('#text-form button[type=submit]');
+await B.waitForSelector('#text-ask-dlg[open]');
+ok(!(await B.textContent('#text-ask-dlg')).includes('receta'), 'un texto de alguien no vinculado pide permiso antes de mostrarse');
+await B.click('#text-ask-dlg button[value=accept]');
 await B.waitForSelector('#text-dlg[open]');
-ok((await B.textContent('#text-body')).includes('https://example.com/receta?id=1'), 'el texto llega y se muestra sin pedir permiso');
+ok((await B.textContent('#text-body')).includes('https://example.com/receta?id=1'), 'aceptado, el texto llega y se muestra');
 ok((await B.isVisible('#text-open')) && (await B.getAttribute('#text-open', 'href')) === 'https://example.com/receta?id=1', 'ofrece abrir el link');
 await A.waitForSelector('.toast:has-text("Le pasaste el texto")');
 await B.screenshot({ path: `${SHOTS}/9-celu-texto.png` });
@@ -338,13 +341,42 @@ toVictim({ t: 'file', id: offerId, index: 0 });
 intruder.send(Buffer.concat([Buffer.from(bId, 'hex'), Buffer.alloc(11)]));
 ok(await answer('cancel', offerId), 'mandar más de lo declarado corta la transferencia');
 ok((await B.evaluate((id) => window.__pasalo.manager.transfers.get(id).status, offerId)) === 'error', 'y queda como error');
+const savedBefore = await B.evaluate(() => window.__pasalo.received.length);
+toVictim({ t: 'text', id: '5'.repeat(16), text: 'pasame tu clave' });
+toVictim({ t: 'text', id: '6'.repeat(16), text: 'pasame tu clave' });
+await B.waitForSelector('#text-ask-dlg[open]');
+await B.click('#text-ask-dlg button[value=decline]');
+await B.waitForTimeout(300);
+ok(!(await B.isVisible('#text-ask-dlg')) && !(await B.isVisible('#text-dlg')) && (await B.evaluate(() => window.__pasalo.received.length)) === savedBefore, 'un texto rechazado no se guarda y mandar varios no llena la pantalla');
 await B.evaluate((id) => window.__pasalo.me.hidden.push({ id, name: 'Intruso', kind: 'phone' }), intruderId);
 toVictim({ t: 'offer', id: '3'.repeat(16), files: [{ name: 'x', size: 1, type: '' }], total: 1 });
 ok((await answer('decline', '3'.repeat(16))) && !(await B.isVisible('#request-dlg')), 'un dispositivo quitado de la lista queda bloqueado');
 toVictim({ t: 'text', id: '4'.repeat(16), text: 'pasame tu clave' });
 await B.waitForTimeout(300);
-ok(!(await B.isVisible('#text-dlg')), 'y tampoco le puede mandar textos');
+ok(!(await B.isVisible('#text-dlg')) && !(await B.isVisible('#text-ask-dlg')), 'y tampoco le puede mandar textos');
 intruder.close();
+
+// ---- 11d. Compartir: otra página no puede dejar archivos pendientes
+// En un contexto aparte: dos pestañas del mismo dispositivo se reemplazan en el servidor.
+const shareCtx = await browser.newContext();
+const shareApp = await shareCtx.newPage();
+await shareApp.goto(BASE);
+await shareApp.evaluate(() => navigator.serviceWorker.ready.then(() => 1));
+const ownShare = await shareApp.evaluate(async () => {
+  const f = new FormData();
+  f.set('text', 'de la app');
+  return (await fetch('/compartir', { method: 'POST', body: f })).url;
+});
+ok(ownShare.includes('compartido=1'), 'Compartir sigue andando');
+await shareApp.evaluate(() => caches.delete('pasalo-share'));
+const evil = await shareCtx.newPage();
+await evil.route('http://sitio-malicioso.example/**', (r) => r.fulfill({ contentType: 'text/html', body: '<form id=f method=post enctype=multipart/form-data action="' + BASE + '/compartir"><input type=hidden name=text value=trampa></form>' }));
+await evil.goto('http://sitio-malicioso.example/');
+await evil.evaluate(() => document.getElementById('f').submit());
+await evil.waitForURL(BASE + '/**');
+const evilUrl = new URL(evil.url());
+ok(evilUrl.pathname === '/' && !evilUrl.search && !(await evil.evaluate(() => caches.has('pasalo-share'))), 'una página ajena no puede dejar archivos para compartir');
+await shareCtx.close();
 await B.evaluate(() => window.__pasalo.me.hidden.pop());
 
 // ---- 12. Tu nube (Google Drive simulado: el script de Google y la API se responden acá)
@@ -485,8 +517,8 @@ let log2 = '';
 server2.stdout.on('data', (d) => (log2 += d));
 for (let i = 0; i < 50 && !(await fetch(`http://127.0.0.1:${PORT2}/health`).catch(() => null)); i++) await new Promise((r) => setTimeout(r, 100));
 const ORIGIN = `http://localhost:${PORT2}`;
-function conn(secret, origin = ORIGIN, extra = {}) {
-  const c = { msgs: [], closed: null, ws: new WebSocket(`ws://localhost:${PORT2}/ws`, { origin }) };
+function conn(secret, origin = ORIGIN, extra = {}, headers = {}) {
+  const c = { msgs: [], closed: null, ws: new WebSocket(`ws://localhost:${PORT2}/ws`, { origin, headers }) };
   c.ws.on('message', (d) => c.msgs.push(JSON.parse(d)));
   c.ws.on('close', (code) => (c.closed ??= code));
   c.ws.on('error', () => (c.closed ??= 'rechazada'));
@@ -529,6 +561,26 @@ brute.msgs.length = 0;
 brute.send({ t: 'pair-join', code: realCode });
 const locked = await brute.wait('pair-error');
 ok(locked?.reason.includes('Demasiados') && !brute.msgs.some((m) => m.t === 'pair-wait'), 'tras muchos intentos fallidos, ni el código correcto sirve');
+const fromIp = async (n) => {
+  const c = conn(secret(), ORIGIN, {}, { 'x-forwarded-for': '100.64.0.' + n });
+  await c.wait('welcome');
+  return c;
+};
+const other = await fromIp(2);
+other.send({ t: 'pair-join', code: realCode });
+ok(await other.wait('pair-wait'), 'los intentos fallidos de uno no les traban el vincular a los demás');
+creator.send({ t: 'pair-reply', ok: false });
+creator.msgs.length = 0;
+creator.send({ t: 'pair-create' });
+const { code: lastCode } = await creator.wait('pair-code');
+for (const n of [3, 4]) {
+  const c = await fromIp(n);
+  for (let i = 0; i < 5; i++) c.send({ t: 'pair-join', code: lastCode === '999998' ? '999997' : '999998' });
+}
+await new Promise((r) => setTimeout(r, 200));
+const late = await fromIp(5);
+late.send({ t: 'pair-join', code: lastCode });
+ok((await late.wait('pair-error'))?.reason.includes('Demasiados'), 'y entre varios siguen teniendo un tope');
 
 // ---- 14. Nada de lo que llegue por la red apaga el servidor
 const rawHttp = (text) => new Promise((res) => {
@@ -563,7 +615,8 @@ const health2 = async () => !!(await fetch('http://127.0.0.1:' + PORT2 + '/healt
 ok(server2.exitCode === null && (await health2()) && !log2.includes('[error]'), 'los pedidos y mensajes malformados no lo apagan ni le causan errores');
 const crowd = Array.from({ length: 110 }, () => conn(secret()));
 await new Promise((r) => setTimeout(r, 600));
-ok(crowd.some((c) => c.closed === 'rechazada') && (await health2()), 'hay un tope de conexiones');
+const outsider = conn(secret(), ORIGIN, {}, { 'x-forwarded-for': '100.64.0.9' });
+ok(crowd.some((c) => c.closed === 'rechazada') && crowd.filter((c) => c.closed === null).length <= 20 && (await outsider.wait('welcome')) && (await health2()), 'uno solo no puede ocupar todas las conexiones');
 server2.kill();
 
 await browser.close();

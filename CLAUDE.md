@@ -45,7 +45,8 @@ tests/e2e.mjs      Playwright: dos navegadores, 300 MB con SHA-256, rechazar, ca
   vinculados se reconocen por la clave (`keys` en `peers`), no por el id. El WebSocket solo atiende páginas propias
   (`fromOwnPage`: Origin igual al host, y host `localhost`, IP, `*.ts.net` o `ALLOWED_HOSTS`).
 - Vincular: acertar el código no alcanza; `pair-join` → `pair-request` al creador → `pair-reply` → `paired`. Tope global de
-  20 códigos fallidos cada 5 min (al llegar, caen todos los códigos activos): por eso alcanzan 6 dígitos.
+  20 códigos fallidos cada 5 min (al llegar, caen todos los códigos activos) y 10 por IP, para que uno solo no trabe a los
+  demás: por eso alcanzan 6 dígitos.
 - Recibidos: el tipo lo elige quien manda, así que `safeType` (util.ts) decide con qué tipo se abre: HTML y SVG solo se
   descargan. Hay CSP (server/index.js) y la heredan los `blob:`. Sin scripts dentro del HTML: por eso `public/theme.js`.
   Del otro dispositivo no se cree nada: id e index validados, y se corta si manda más de lo declarado. Quitar de la lista
@@ -54,11 +55,12 @@ tests/e2e.mjs      Playwright: dos navegadores, 300 MB con SHA-256, rechazar, ca
   cifrar y entraría cualquiera); si no, en 0.0.0.0 con aviso. `HOST` en `.env` manda sobre esto. El Host de cada pedido se
   revisa contra DNS rebinding (`hostAllowed`; un dominio propio va en `ALLOWED_HOSTS`).
 - Servidor robusto: todo lo que llega de la red se valida antes de usar (`clean`, `isId`), cada WebSocket tiene `on('error')`
-  y hay tope de conexiones, de cola del puente y de líneas por minuto en el registro. En `tests/e2e.mjs` están los pedidos
+  y hay tope de conexiones (100 en total, 20 por IP), de cola del puente y de líneas por minuto en el registro. En `tests/e2e.mjs` están los pedidos
   que antes lo apagaban. Revisión de seguridad completa el 4/11/2026.
 - Si la compu abre la app por su propia IP de red, el servidor redirige a `http://localhost:3000` (evita identidades duplicadas).
 - Protocolo por DataChannel: offer → accept/decline → file / trozos binarios / file-end → done → received; ack con bytes escritos.
-  Texto: {t:text} → received, sin aceptar (máx. 10.000 caracteres); el receptor lo guarda como un recibido con `text`.
+  Texto: {t:text} → received (máx. 10.000 caracteres). El emisor no espera, pero el receptor pregunta la primera vez a quien no
+  está vinculado (`me.textOk`) y recién ahí lo guarda como un recibido con `text`.
 - Versiones: /config.json trae `build` (el script de dist/index.html, leído en cada pedido). La app lo compara al volver
   a primer plano y cada 10 min, y se recarga sola si cambió y no hay transferencias, diálogos ni nada pendiente
   (la app instalada en iPhone no se recarga nunca por su cuenta).
@@ -78,7 +80,7 @@ tests/e2e.mjs      Playwright: dos navegadores, 300 MB con SHA-256, rechazar, ca
 - Manual: `npm install && npm run build && npm start` → http://localhost:3000. Desarrollo: `npm run dev`.
 - GitHub Actions (`.github/workflows/ci.yml`) corre check, build y el e2e (directo y RELAY=1, SIZE_MB=100) en cada push
   a main; la insignia está en los dos README (README.md en español, README.en.md en inglés: mantener los dos).
-- Versiones: Releases en GitHub con Pasalo-windows.zip (v1.0.0 26/10/2026, v1.1.0 6/11/2026). El zip se arma desde `git archive HEAD`
+- Versiones: Releases en GitHub con Pasalo-windows.zip (v1.0.0 26/10/2026, v1.1.0 6/11/2026, v1.1.1 6/11/2026). El zip se arma desde `git archive HEAD`
   en una carpeta limpia: `npm ci`, build, se copian dist, server, package*.json, los .bat y LICENSE, `npm ci --omit=dev` y LEEME.txt.
 - Pruebas: `GOOGLE_CLIENT_ID= PORT=3100 npm start` (sin el ID real del `.env`) y `npm run test:e2e` (necesita Playwright). `RELAY=1` fuerza el puente por el servidor.
 

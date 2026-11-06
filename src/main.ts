@@ -153,13 +153,45 @@ drive.addEventListener('received', (e) => {
   toast(tx('Listo, "{name}" está en Recibidos.', { name: (e as CustomEvent<Received>).detail.name }));
 });
 
-manager.addEventListener('text', async (e) => {
-  const { peerId, peerName, text } = (e as CustomEvent<{ peerId: string; peerName: string; text: string }>).detail;
-  if (isHidden(peerId)) return;
+async function openText(peerName: string, text: string) {
   const r = await saveText(randomHex(8), text, peerName);
   received.unshift(r);
   renderReceived();
   showText(r, tx('{name} te pasó un texto', { name: peerName }));
+}
+
+// Quien no está vinculado necesita que le aceptes un texto una vez: hasta entonces no se muestra ni se guarda.
+const pendingTexts = new Map<string, { peerName: string; text: string }>();
+
+function askNextText() {
+  const dlg = $<HTMLDialogElement>('text-ask-dlg');
+  const next = pendingTexts.values().next().value;
+  if (dlg.open || !next) return;
+  $('text-ask-title').textContent = tx('{name} te quiere pasar un texto', { name: next.peerName });
+  dlg.returnValue = '';
+  dlg.showModal();
+}
+
+manager.addEventListener('text', (e) => {
+  const { peerId, peerName, text } = (e as CustomEvent<{ peerId: string; peerName: string; text: string }>).detail;
+  if (isHidden(peerId)) return;
+  if (me.textOk.includes(peerId) || peers.find((p) => p.id === peerId)?.via.includes('vinculado')) return void openText(peerName, text);
+  if (pendingTexts.has(peerId)) return; // un pedido por dispositivo a la vez: nadie llena la pantalla
+  pendingTexts.set(peerId, { peerName, text });
+  askNextText();
+});
+
+$<HTMLDialogElement>('text-ask-dlg').addEventListener('close', () => {
+  const [entry] = pendingTexts;
+  if (!entry) return;
+  const [id, { peerName, text }] = entry;
+  pendingTexts.delete(id);
+  if ($<HTMLDialogElement>('text-ask-dlg').returnValue === 'accept') {
+    me.textOk.push(id);
+    saveIdentity(me);
+    void openText(peerName, text);
+  }
+  askNextText();
 });
 
 function sendTo(peerId: string, files: Source[]) {

@@ -23,6 +23,8 @@ export interface Identity {
   kind: DeviceKind;
   pairs: Pairing[];
   hidden: HiddenDevice[];
+  /** Dispositivos a los que ya les aceptaste un texto. */
+  textOk: string[];
 }
 
 const KEY = 'pasalo.identity.v1';
@@ -45,6 +47,7 @@ export function loadIdentity(): Identity {
     name: saved.name || defaultName(kind),
     pairs: Array.isArray(saved.pairs) ? saved.pairs : [],
     hidden: Array.isArray(saved.hidden) ? saved.hidden : [],
+    textOk: Array.isArray(saved.textOk) ? saved.textOk : [],
   };
   saveIdentity(me);
   return me;
