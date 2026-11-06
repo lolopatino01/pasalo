@@ -98,7 +98,7 @@ function serveStatic(req, res) {
     return;
   }
   const file = path.normalize(path.join(DIST, urlPath));
-  if (!file.startsWith(DIST)) {
+  if (!file.startsWith(DIST + path.sep)) { // con el separador: "dist-otra" también empieza con "dist"
     res.writeHead(403).end();
     return;
   }

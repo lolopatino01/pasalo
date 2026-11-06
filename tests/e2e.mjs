@@ -539,6 +539,10 @@ const rawHttp = (text) => new Promise((res) => {
   setTimeout(() => (s.destroy(), res(got)), 150);
 });
 ok((await rawHttp('GET / HTTP/1.1\r\nHost: sitio-malicioso.example\r\n\r\n')).startsWith('HTTP/1.1 403'), 'un nombre ajeno en Host se rechaza (DNS rebinding)');
+fs.mkdirSync('dist-prueba', { recursive: true });
+fs.writeFileSync('dist-prueba/secreto.txt', 'x');
+ok((await rawHttp('GET /..%2fdist-prueba/secreto.txt HTTP/1.1\r\nHost: localhost\r\n\r\n')).startsWith('HTTP/1.1 403'), 'no se puede leer fuera de dist/, ni en una carpeta con nombre parecido');
+fs.rmSync('dist-prueba', { recursive: true });
 for (const p of ['//', '/%00', '/x%00.js']) await rawHttp('GET ' + p + ' HTTP/1.1\r\nHost: localhost\r\n\r\n');
 await rawHttp('GET // HTTP/1.1\r\nHost: localhost\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n');
 const trap = { toString: 1, valueOf: 1 };
